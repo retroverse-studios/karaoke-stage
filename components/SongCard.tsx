@@ -1,10 +1,11 @@
 
 import React, { useState } from 'react';
-import { Song, ThemeConfig, ThemeId } from '../types';
+import { ThemeConfig, ThemeId } from '../types';
+import { SongMetadata } from '../services';
 
 interface SongCardProps {
-  song: Song;
-  onSelect: (song: Song) => void;
+  song: SongMetadata;
+  onSelect: (song: SongMetadata) => void;
   onDelete: (id: string) => void;
   onRename: (id: string, newTitle: string) => void;
   onChangeCategories: (id: string, themeIds: ThemeId[]) => void;
@@ -15,13 +16,13 @@ interface SongCardProps {
 
 const SongCard: React.FC<SongCardProps> = ({ song, onSelect, onDelete, onRename, onChangeCategories, theme, allThemes, isDark }) => {
   // Get all themes except 'classic' for category picking
-  const selectableThemes = Object.values(allThemes).filter(t => t.id !== 'classic');
+  const selectableThemes = (Object.values(allThemes) as ThemeConfig[]).filter(t => t.id !== 'classic');
   const [isEditing, setIsEditing] = useState(false);
   const [editTitle, setEditTitle] = useState(song.title);
   const [showCategoryPicker, setShowCategoryPicker] = useState(false);
 
-  // Get array of theme IDs (handle legacy single themeId)
-  const songThemeIds = song.themeIds || (song.themeId ? [song.themeId] : ['christmas']);
+  // Get array of theme IDs
+  const songThemeIds = song.themeIds || ['christmas'];
 
   const handleDelete = (e: React.MouseEvent) => {
     e.preventDefault();
