@@ -4,8 +4,8 @@
  * A web-based karaoke player with themed categories and CDG+MP3 support.
  */
 
-import React, { useState, useMemo } from 'react';
-import Atmosphere from './components/Atmosphere';
+import React, { useState, useMemo, useRef, useCallback } from 'react';
+import Atmosphere, { AtmosphereRef } from './components/Atmosphere';
 import SongCard from './components/SongCard';
 import KaraokeStage from './components/KaraokeStage';
 import SettingsModal from './components/SettingsModal';
@@ -44,6 +44,13 @@ const App: React.FC = () => {
   const [searchTerm, setSearchTerm] = useState('');
   const [isUploading, setIsUploading] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
+  
+  // Ref for atmosphere to trigger confetti bursts
+  const atmosphereRef = useRef<AtmosphereRef>(null);
+  
+  const triggerConfetti = useCallback(() => {
+    atmosphereRef.current?.triggerConfettiBurst();
+  }, []);
 
   // Filter songs by search and theme
   const filteredSongs = useMemo(() => {
@@ -110,7 +117,7 @@ const App: React.FC = () => {
     <div className={`min-h-screen relative flex flex-col overflow-x-hidden ${
       isDark ? 'bg-slate-950 text-white' : 'bg-gray-100 text-gray-900'
     }`}>
-      <Atmosphere type={activeTheme.particleType} />
+      <Atmosphere ref={atmosphereRef} type={activeTheme.particleType} />
       <div className={`fixed inset-0 bg-gradient-to-b ${
         isDark ? activeTheme.bgGradient : 'from-gray-100 via-gray-50 to-gray-100'
       } pointer-events-none`}></div>
@@ -241,7 +248,8 @@ const App: React.FC = () => {
               song={currentSong} 
               settings={settings} 
               onExit={clearCurrentSong} 
-              theme={activeTheme} 
+              theme={activeTheme}
+              onConfetti={triggerConfetti}
             />
           </ErrorBoundary>
         )}

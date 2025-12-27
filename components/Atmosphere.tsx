@@ -1,14 +1,42 @@
 
-import React, { useEffect, useState } from 'react';
-import { ThemeId } from '../types';
+import { useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 
-interface AtmosphereProps {
-  type: 'snow' | 'confetti' | 'egg' | 'star' | 'bubble' | 'bat' | 'heart' | 'sparkle';
+export type ParticleType = 'snow' | 'confetti' | 'egg' | 'star' | 'bubble' | 'bat' | 'heart' | 'sparkle';
+
+interface Particle {
+  id: number;
+  left: string;
+  size: string;
+  duration: string;
+  delay: string;
+  content: string;
+  color?: string;
 }
 
-const Atmosphere: React.FC<AtmosphereProps> = ({ type }) => {
-  const [particles, setParticles] = useState<{ id: number; left: string; size: string; duration: string; delay: string; content: string; color?: string }[]>([]);
+interface BurstParticle {
+  id: number;
+  x: number;
+  y: number;
+  content: string;
+  size: number;
+  angle: number;
+  velocity: number;
+  opacity: number;
+}
 
+interface AtmosphereProps {
+  type: ParticleType;
+}
+
+export interface AtmosphereRef {
+  triggerConfettiBurst: () => void;
+}
+
+const Atmosphere = forwardRef<AtmosphereRef, AtmosphereProps>(({ type }, ref) => {
+  const [particles, setParticles] = useState<Particle[]>([]);
+  const [burstParticles, setBurstParticles] = useState<BurstParticle[]>([]);
+
+  // Generate background particles
   useEffect(() => {
     const pickRandom = (options: string[]) => options[Math.floor(Math.random() * options.length)];
     
@@ -37,8 +65,58 @@ const Atmosphere: React.FC<AtmosphereProps> = ({ type }) => {
     setParticles(newParticles);
   }, [type]);
 
+  // Confetti burst animation
+  const triggerConfettiBurst = useCallback(() => {
+    const confettiEmojis = ['🎊', '🎉', '✨', '⭐', '💫', '🌟', '🎵', '🎶', '🔥'];
+    const centerX = window.innerWidth / 2;
+    const centerY = window.innerHeight / 2;
+    
+    const newBurst: BurstParticle[] = Array.from({ length: 30 }).map((_, i) => ({
+      id: Date.now() + i,
+      x: centerX,
+      y: centerY,
+      content: confettiEmojis[Math.floor(Math.random() * confettiEmojis.length)],
+      size: Math.random() * 20 + 15,
+      angle: (Math.PI * 2 * i) / 30 + Math.random() * 0.5,
+      velocity: Math.random() * 300 + 200,
+      opacity: 1,
+    }));
+    
+    setBurstParticles(prev => [...prev, ...newBurst]);
+    
+    // Animate burst particles
+    let frame = 0;
+    const maxFrames = 60;
+    
+    const animate = () => {
+      frame++;
+      
+      setBurstParticles(prev => 
+        prev.map(p => ({
+          ...p,
+          x: p.x + Math.cos(p.angle) * p.velocity * 0.016,
+          y: p.y + Math.sin(p.angle) * p.velocity * 0.016 + frame * 2, // Add gravity
+          velocity: p.velocity * 0.95, // Slow down
+          opacity: Math.max(0, 1 - frame / maxFrames),
+        })).filter(p => p.opacity > 0)
+      );
+      
+      if (frame < maxFrames) {
+        requestAnimationFrame(animate);
+      }
+    };
+    
+    requestAnimationFrame(animate);
+  }, []);
+
+  // Expose methods to parent via ref
+  useImperativeHandle(ref, () => ({
+    triggerConfettiBurst,
+  }));
+
   return (
     <div className="fixed inset-0 pointer-events-none overflow-hidden z-0">
+      {/* Background particles */}
       {particles.map(p => (
         <div
           key={p.id}
@@ -57,8 +135,30 @@ const Atmosphere: React.FC<AtmosphereProps> = ({ type }) => {
           {p.content}
         </div>
       ))}
+      
+      {/* Burst particles (confetti on streak) */}
+      {burstParticles.map(p => (
+        <div
+          key={p.id}
+          className="select-none pointer-events-none"
+          style={{
+            position: 'fixed',
+            left: p.x,
+            top: p.y,
+            fontSize: p.size,
+            opacity: p.opacity,
+            transform: 'translate(-50%, -50%)',
+            transition: 'none',
+            zIndex: 1000,
+          }}
+        >
+          {p.content}
+        </div>
+      ))}
     </div>
   );
-};
+});
+
+Atmosphere.displayName = 'Atmosphere';
 
 export default Atmosphere;

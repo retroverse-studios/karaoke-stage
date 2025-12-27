@@ -2,26 +2,52 @@
 import React, { useState, useEffect, useRef, useCallback } from 'react';
 import { Song, UserSettings, ThemeConfig } from '../types';
 import { createRenderer, isGraphicsFormat, KaraokeRenderer, LyricsDisplay } from '../formats';
+import { usePitchDetection } from '../hooks/usePitchDetection';
+import PitchMeter from './PitchMeter';
+import SingingSummary from './SingingSummary';
 
 interface KaraokeStageProps {
   song: Song;
   settings: UserSettings;
   onExit: () => void;
   theme: ThemeConfig;
+  /** Callback to trigger confetti burst */
+  onConfetti?: () => void;
 }
 
-const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, theme }) => {
+const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, theme, onConfetti }) => {
   const [isPlaying, setIsPlaying] = useState(false);
   const [isReady, setIsReady] = useState(false);
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(song.duration || 0);
   const [error, setError] = useState<string | null>(null);
   const [lyrics, setLyrics] = useState<LyricsDisplay | null>(null);
+  const [showSummary, setShowSummary] = useState(false);
+  const [showPitchMeter, setShowPitchMeter] = useState(true);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
   const rendererRef = useRef<KaraokeRenderer | null>(null);
+  const audioConnectedRef = useRef(false);
+
+  // Pitch detection hook
+  const {
+    pitch,
+    stats,
+    enableMic,
+    disableMic,
+    connectReferenceAudio,
+    resetStats,
+    onStreakConfetti,
+  } = usePitchDetection();
+
+  // Register confetti callback
+  useEffect(() => {
+    if (onConfetti) {
+      onStreakConfetti(onConfetti);
+    }
+  }, [onConfetti, onStreakConfetti]);
 
   // Determine if this song uses graphics (CDG) or text (LRC) format
   const isGraphics = isGraphicsFormat(song.lyricsFormat || 'cdg');
@@ -47,6 +73,15 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
       rendererRef.current = null;
     };
   }, [song.id, song.lyricsData, song.cdgData, song.lyricsFormat]);
+
+  // Connect audio element for pitch detection when it's ready
+  useEffect(() => {
+    const audio = audioRef.current;
+    if (audio && isReady && !audioConnectedRef.current) {
+      connectReferenceAudio(audio);
+      audioConnectedRef.current = true;
+    }
+  }, [isReady, connectReferenceAudio]);
 
   const renderFrame = useCallback((time: number) => {
     const renderer = rendererRef.current;
@@ -101,7 +136,7 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
   const togglePlay = useCallback(() => {
     if (audioRef.current) {
       if (audioRef.current.paused) {
-        audioRef.current.play().then(() => setIsPlaying(true)).catch(e => {
+        audioRef.current.play().then(() => setIsPlaying(true)).catch((e: Error) => {
           console.error("Playback blocked", e);
           setError("Interaction required. Click play to start!");
         });
@@ -115,6 +150,28 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
   const seek = (time: number) => {
     if (audioRef.current) {
       audioRef.current.currentTime = Math.max(0, Math.min(duration, time));
+    }
+  };
+
+  const handleSongEnd = () => {
+    setIsPlaying(false);
+    setShowSummary(true);
+  };
+
+  const handleSingAgain = () => {
+    setShowSummary(false);
+    resetStats();
+    if (audioRef.current) {
+      audioRef.current.currentTime = 0;
+      audioRef.current.play().then(() => setIsPlaying(true));
+    }
+  };
+
+  const handleMicToggle = async () => {
+    if (pitch.micEnabled) {
+      disableMic();
+    } else {
+      await enableMic();
     }
   };
 
@@ -146,7 +203,7 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
         >
           {lyrics.currentWordIndex !== undefined ? (
             // Word-by-word highlighting for enhanced LRC
-            lyrics.currentLine.split(/(\s+)/).map((word, i) => (
+            lyrics.currentLine.split(/(\s+)/).map((word: string, i: number) => (
               <span 
                 key={i} 
                 className={i <= lyrics.currentWordIndex! * 2 ? 'opacity-100' : 'opacity-40'}
@@ -185,12 +242,13 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
       <audio 
         ref={audioRef} 
         src={song.audioUrl} 
-        onEnded={onExit}
+        onEnded={handleSongEnd}
         onCanPlay={() => setIsReady(true)}
-        onLoadedMetadata={(e) => setDuration(e.currentTarget.duration)}
+        onLoadedMetadata={(e: React.SyntheticEvent<HTMLAudioElement>) => setDuration(e.currentTarget.duration)}
         onError={() => setError("Error loading media file.")}
       />
 
+      {/* Header */}
       <div className="flex justify-between items-center mb-4 relative z-20 px-4">
         <div className="flex items-center space-x-4">
           <div className={`w-3 h-3 rounded-full ${isPlaying ? 'bg-red-500 animate-pulse' : 'bg-gray-600'}`}></div>
@@ -201,11 +259,43 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
             </p>
           </div>
         </div>
-        <button onClick={onExit} className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-full text-sm font-bold transition-all border border-white/10">
-          Exit Room
-        </button>
+        
+        <div className="flex items-center space-x-3">
+          {/* Mic toggle button */}
+          <button 
+            onClick={handleMicToggle}
+            className={`px-4 py-2 rounded-full text-sm font-bold transition-all border ${
+              pitch.micEnabled 
+                ? 'bg-green-600 hover:bg-green-500 border-green-500 text-white' 
+                : 'bg-white/10 hover:bg-white/20 border-white/10 text-white'
+            }`}
+            title={pitch.micEnabled ? 'Disable microphone' : 'Enable microphone for scoring'}
+          >
+            {pitch.micEnabled ? '🎤 Mic On' : '🎤 Enable Mic'}
+          </button>
+          
+          {/* Pitch meter toggle */}
+          {pitch.micEnabled && (
+            <button 
+              onClick={() => setShowPitchMeter(!showPitchMeter)}
+              className={`px-4 py-2 rounded-full text-sm font-bold transition-all border ${
+                showPitchMeter 
+                  ? 'bg-white/20 border-white/20 text-white' 
+                  : 'bg-white/10 hover:bg-white/20 border-white/10 text-gray-400'
+              }`}
+              title={showPitchMeter ? 'Hide pitch meter' : 'Show pitch meter'}
+            >
+              📊
+            </button>
+          )}
+          
+          <button onClick={onExit} className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-full text-sm font-bold transition-all border border-white/10">
+            Exit Room
+          </button>
+        </div>
       </div>
 
+      {/* Main content area */}
       <div className="flex-1 flex flex-col items-center justify-center relative z-10">
         <div 
           onClick={togglePlay}
@@ -252,12 +342,27 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
             </div>
           )}
         </div>
+
+        {/* Pitch Meter - below the video */}
+        {pitch.micEnabled && (
+          <div className="w-full max-w-md mt-6">
+            <PitchMeter
+              matchScore={pitch.matchScore}
+              direction={pitch.direction}
+              streak={pitch.streak}
+              isListening={pitch.isListening}
+              isVisible={showPitchMeter}
+              isDark={true}
+            />
+          </div>
+        )}
       </div>
 
+      {/* Controls */}
       <div className="max-w-4xl w-full mx-auto mt-6 bg-slate-900/90 backdrop-blur-3xl p-6 rounded-[2.5rem] border border-white/10 shadow-2xl relative z-30">
         <div className="flex items-center space-x-6 mb-4 px-2">
           <span className="text-[10px] font-mono text-gray-500 w-12 text-right">{Math.floor(currentTime / 60)}:{(Math.floor(currentTime % 60)).toString().padStart(2, '0')}</span>
-          <div className="flex-1 h-3 bg-black/60 rounded-full overflow-hidden cursor-pointer" onClick={(e) => {
+          <div className="flex-1 h-3 bg-black/60 rounded-full overflow-hidden cursor-pointer" onClick={(e: React.MouseEvent<HTMLDivElement>) => {
             const rect = e.currentTarget.getBoundingClientRect();
             seek(((e.clientX - rect.left) / rect.width) * duration);
           }}>
@@ -279,7 +384,30 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
              <svg className="w-10 h-10" fill="currentColor" viewBox="0 0 20 20"><path d="M4.555 5.168A1 1 0 003 6v8a1 1 0 001.555.832l6-4a1 1 0 000-1.664l-6-4zM11.555 5.168A1 1 0 0010 6v8a1 1 0 001.555.832l6-4a1 1 0 000-1.664l-6-4z"></path></svg>
           </button>
         </div>
+
+        {/* Live score display when mic is enabled */}
+        {pitch.micEnabled && stats.totalSamples > 0 && (
+          <div className="text-center mt-4 text-sm text-gray-400">
+            Current Score: <span className="text-white font-bold">{stats.percentage}%</span>
+            {stats.bestStreak > 5 && (
+              <span className="ml-4">Best Streak: <span className="text-yellow-400 font-bold">{stats.bestStreak}</span> 🔥</span>
+            )}
+          </div>
+        )}
       </div>
+
+      {/* Summary modal */}
+      {showSummary && (
+        <SingingSummary
+          percentage={stats.percentage}
+          bestStreak={stats.bestStreak}
+          totalSamples={stats.totalSamples}
+          onSingAgain={handleSingAgain}
+          onBack={onExit}
+          primaryColor={theme.primaryHex}
+          isDark={true}
+        />
+      )}
     </div>
   );
 };
