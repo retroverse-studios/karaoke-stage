@@ -119,7 +119,7 @@ const App: React.FC = () => {
         const request = store.getAll();
         
         request.onsuccess = () => {
-          // Only extract metadata - exclude audioBlob and cdgData from React state
+          // Only extract metadata - exclude audioBlob and lyricsData from React state
           const songs: Song[] = request.result.map((s: any) => ({
             id: s.id,
             title: s.title,
@@ -128,6 +128,7 @@ const App: React.FC = () => {
             description: s.description || 'Custom Track',
             isCustom: s.isCustom ?? true,
             themeIds: s.themeIds || (s.themeId ? [s.themeId] : ['christmas']),
+            lyricsFormat: s.lyricsFormat || 'cdg',
           }));
           setCustomSongs(songs);
           setIsLoading(false);
@@ -176,7 +177,9 @@ const App: React.FC = () => {
             isCustom: s.isCustom ?? true,
             themeIds: s.themeIds || (s.themeId ? [s.themeId] : ['christmas']),
             audioUrl: s.audioBlob ? URL.createObjectURL(s.audioBlob) : undefined,
-            cdgData: s.cdgData,
+            lyricsFormat: s.lyricsFormat || 'cdg',
+            lyricsData: s.lyricsData || s.cdgData,  // Support legacy cdgData field
+            cdgData: s.cdgData,  // Keep for backwards compatibility
           });
         };
         request.onerror = () => resolve(null);
@@ -233,7 +236,9 @@ const App: React.FC = () => {
         difficulty: 'Medium',
         description: 'Custom Track',
         audioBlob: audio,
-        cdgData,
+        lyricsFormat: 'cdg',
+        lyricsData: cdgData,
+        cdgData,  // Keep for backwards compatibility
         isCustom: true,
         themeIds
       };
@@ -246,14 +251,16 @@ const App: React.FC = () => {
         difficulty: 'Medium',
         description: 'Custom Track',
         isCustom: true,
-        themeIds
+        themeIds,
+        lyricsFormat: 'cdg'
       };
 
       // Full song for immediate playback (loaded fresh, not kept in state)
       const playbackSong: Song = {
         ...metadataSong,
         audioUrl: URL.createObjectURL(audio),
-        cdgData,
+        lyricsData: cdgData,
+        cdgData,  // Keep for backwards compatibility
       };
 
       const transaction = db.transaction(STORE_NAME, 'readwrite');
@@ -362,7 +369,7 @@ const App: React.FC = () => {
   const saveSongToDb = async (name: string, mp3File: File, cdgFile: File, categories: ThemeId[]): Promise<boolean> => {
     try {
       const buffer = await cdgFile.arrayBuffer();
-      const cdgData = new Uint8Array(buffer);
+      const lyricsData = new Uint8Array(buffer);
       const db = await getDB();
 
       const songId = `song-${Date.now()}-${Math.random().toString(36).substr(2, 9)}`;
@@ -379,7 +386,9 @@ const App: React.FC = () => {
         difficulty: 'Medium',
         description: 'Custom Track',
         audioBlob: mp3File,
-        cdgData,
+        lyricsFormat: 'cdg',
+        lyricsData,
+        cdgData: lyricsData,  // Keep for backwards compatibility
         isCustom: true,
         themeIds
       };
@@ -391,7 +400,8 @@ const App: React.FC = () => {
         difficulty: 'Medium',
         description: 'Custom Track',
         isCustom: true,
-        themeIds
+        themeIds,
+        lyricsFormat: 'cdg'
       };
 
       return new Promise((resolve) => {

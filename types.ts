@@ -39,18 +39,24 @@ export interface CustomCategory {
   particleType: ParticleType;
 }
 
+/** Supported karaoke lyrics/graphics formats */
+export type LyricsFormat = 'cdg' | 'lrc';
+
 export interface Song {
   id: string;
   title: string;
   duration: number;
   difficulty: Difficulty;
   description: string;
-  audioUrl?: string;      // Only set when loaded for playback
-  cdgData?: Uint8Array;   // Only set when loaded for playback
+  audioUrl?: string;        // Only set when loaded for playback
+  lyricsFormat: LyricsFormat;  // What format the lyrics/graphics are in
+  lyricsData?: Uint8Array | string;  // CDG = Uint8Array, LRC = string (only set when loaded for playback)
   isCustom: boolean;
   themeIds: ThemeId[];
   /** @deprecated Use themeIds instead */
-  themeId?: ThemeId; 
+  themeId?: ThemeId;
+  /** @deprecated Use lyricsData instead */
+  cdgData?: Uint8Array;
 }
 
 export type CategoryDisplayMode = 'emoji' | 'name' | 'both';

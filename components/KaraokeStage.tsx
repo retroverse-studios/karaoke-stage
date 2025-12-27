@@ -1,7 +1,7 @@
 
 import React, { useState, useEffect, useRef, useCallback } from 'react';
-import CDGraphics from 'cdgraphics';
 import { Song, UserSettings, ThemeConfig } from '../types';
+import { createRenderer, isGraphicsFormat, KaraokeRenderer, LyricsDisplay } from '../formats';
 
 interface KaraokeStageProps {
   song: Song;
@@ -16,51 +16,68 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
   const [currentTime, setCurrentTime] = useState(0);
   const [duration, setDuration] = useState(song.duration || 0);
   const [error, setError] = useState<string | null>(null);
+  const [lyrics, setLyrics] = useState<LyricsDisplay | null>(null);
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
   const rafRef = useRef<number | null>(null);
-  const cdgRef = useRef<CDGraphics | null>(null);
+  const rendererRef = useRef<KaraokeRenderer | null>(null);
 
-  // Initialize CDGraphics renderer when song changes
+  // Determine if this song uses graphics (CDG) or text (LRC) format
+  const isGraphics = isGraphicsFormat(song.lyricsFormat || 'cdg');
+
+  // Initialize renderer when song changes
   useEffect(() => {
-    if (song.cdgData) {
-      // Convert Uint8Array to ArrayBuffer for cdgraphics library
-      const buffer = song.cdgData.buffer.slice(
-        song.cdgData.byteOffset,
-        song.cdgData.byteOffset + song.cdgData.byteLength
-      );
-      cdgRef.current = new CDGraphics(buffer);
-      console.log("[KaraokeStage] Initialized CDGraphics renderer for song:", song.id);
+    // Support both new lyricsData and legacy cdgData
+    const data = song.lyricsData || song.cdgData;
+    const format = song.lyricsFormat || 'cdg';
+    
+    if (data) {
+      try {
+        rendererRef.current = createRenderer(format, data);
+        console.log(`[KaraokeStage] Initialized ${format.toUpperCase()} renderer for song:`, song.id);
+      } catch (err) {
+        console.error(`[KaraokeStage] Failed to initialize renderer:`, err);
+        setError(`Failed to load ${format.toUpperCase()} data`);
+      }
     }
     
     return () => {
-      cdgRef.current = null;
+      rendererRef.current?.dispose();
+      rendererRef.current = null;
     };
-  }, [song.id, song.cdgData]);
+  }, [song.id, song.lyricsData, song.cdgData, song.lyricsFormat]);
 
   const renderFrame = useCallback((time: number) => {
-    const canvas = canvasRef.current;
-    const cdg = cdgRef.current;
-    if (!canvas || !cdg) return;
-    
-    const ctx = canvas.getContext('2d');
-    if (!ctx) return;
+    const renderer = rendererRef.current;
+    if (!renderer) return;
 
-    const frame = cdg.render(time);
-    if (!frame.isChanged) return;
+    const result = renderer.render(time);
+    if (!result.hasContent) return;
 
-    // Use createImageBitmap for better performance
-    createImageBitmap(frame.imageData)
-      .then(bitmap => {
-        ctx.clearRect(0, 0, canvas.width, canvas.height);
-        ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-      })
-      .catch(() => {
-        // Fallback to putImageData if createImageBitmap fails
-        ctx.putImageData(frame.imageData, 0, 0);
-      });
-  }, []);
+    if (isGraphics && result.imageData) {
+      // Graphics format (CDG) - render to canvas
+      const canvas = canvasRef.current;
+      if (!canvas) return;
+      
+      const ctx = canvas.getContext('2d');
+      if (!ctx) return;
+
+      // Use createImageBitmap for better performance
+      createImageBitmap(result.imageData)
+        .then(bitmap => {
+          ctx.clearRect(0, 0, canvas.width, canvas.height);
+          ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
+        })
+        .catch(() => {
+          // Fallback to putImageData if createImageBitmap fails
+          ctx.putImageData(result.imageData!, 0, 0);
+        });
+    } else if (result.lyrics) {
+      // Text format (LRC) - update lyrics state
+      setLyrics(result.lyrics);
+    }
+  }, [isGraphics]);
 
   const tick = useCallback(() => {
     if (!audioRef.current) return;
@@ -101,6 +118,68 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
     }
   };
 
+  // Render lyrics for text-based formats (LRC)
+  const renderLyricsDisplay = () => {
+    if (!lyrics) {
+      return (
+        <div className="flex items-center justify-center h-full text-gray-500 text-2xl">
+          Waiting for lyrics...
+        </div>
+      );
+    }
+
+    return (
+      <div className="flex flex-col items-center justify-center h-full px-8 text-center space-y-6">
+        {/* Previous line (dimmed) */}
+        {lyrics.previousLine && (
+          <p className="text-2xl text-gray-500 opacity-50 transition-all">
+            {lyrics.previousLine}
+          </p>
+        )}
+        
+        {/* Current line (highlighted) */}
+        <p 
+          className="text-4xl md:text-5xl font-bold text-white transition-all"
+          style={{ 
+            textShadow: `0 0 30px ${theme.primaryHex}, 0 0 60px ${theme.primaryHex}40`
+          }}
+        >
+          {lyrics.currentWordIndex !== undefined ? (
+            // Word-by-word highlighting for enhanced LRC
+            lyrics.currentLine.split(/(\s+)/).map((word, i) => (
+              <span 
+                key={i} 
+                className={i <= lyrics.currentWordIndex! * 2 ? 'opacity-100' : 'opacity-40'}
+              >
+                {word}
+              </span>
+            ))
+          ) : (
+            lyrics.currentLine || '\u00A0' // Non-breaking space if empty
+          )}
+        </p>
+        
+        {/* Next line (preview) */}
+        {lyrics.nextLine && (
+          <p className="text-xl text-gray-400 opacity-70 transition-all">
+            {lyrics.nextLine}
+          </p>
+        )}
+        
+        {/* Progress bar for current line */}
+        <div className="w-64 h-1 bg-white/10 rounded-full overflow-hidden mt-4">
+          <div 
+            className="h-full transition-all duration-100"
+            style={{ 
+              width: `${lyrics.lineProgress * 100}%`,
+              backgroundColor: theme.primaryHex 
+            }}
+          />
+        </div>
+      </div>
+    );
+  };
+
   return (
     <div className="fixed inset-0 bg-black z-[200] flex flex-col p-4 overflow-hidden select-none">
       <audio 
@@ -117,7 +196,9 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
           <div className={`w-3 h-3 rounded-full ${isPlaying ? 'bg-red-500 animate-pulse' : 'bg-gray-600'}`}></div>
           <div>
             <h2 className="text-xl md:text-2xl font-bold text-white leading-tight truncate">{song.title}</h2>
-            <p className="text-gray-400 text-[10px] font-mono uppercase tracking-widest">{theme.name} Studio Mode</p>
+            <p className="text-gray-400 text-[10px] font-mono uppercase tracking-widest">
+              {theme.name} Studio Mode ({(song.lyricsFormat || 'cdg').toUpperCase()})
+            </p>
           </div>
         </div>
         <button onClick={onExit} className="bg-white/10 hover:bg-white/20 text-white px-6 py-2 rounded-full text-sm font-bold transition-all border border-white/10">
@@ -130,7 +211,23 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
           onClick={togglePlay}
           className="relative w-full max-w-5xl aspect-[300/216] bg-slate-900 rounded-3xl shadow-[0_0_80px_rgba(0,0,0,0.9)] border-4 border-slate-800 overflow-hidden cursor-pointer group"
         >
-          <canvas ref={canvasRef} width={300} height={216} className="w-full h-full" style={{ imageRendering: 'pixelated' }} />
+          {/* Graphics display (CDG) */}
+          {isGraphics && (
+            <canvas 
+              ref={canvasRef} 
+              width={300} 
+              height={216} 
+              className="w-full h-full" 
+              style={{ imageRendering: 'pixelated' }} 
+            />
+          )}
+          
+          {/* Lyrics display (LRC) */}
+          {!isGraphics && (
+            <div className="w-full h-full bg-gradient-to-b from-slate-900 via-slate-800 to-slate-900">
+              {renderLyricsDisplay()}
+            </div>
+          )}
 
           {!isReady && !error && (
             <div className="absolute inset-0 bg-black/90 flex flex-col items-center justify-center text-white">
