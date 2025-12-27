@@ -1,10 +1,10 @@
-# Merry Karaoke
+# Karaoke Stage
 
-A modern, themed CDG+MP3 karaoke player built with React 19, TypeScript, and Vite. Store your karaoke collection in the browser and sing along with synchronized lyrics graphics.
+A modern, themed karaoke player supporting CDG+MP3 and LRC formats. Built with React 19, TypeScript, and Vite. Store your karaoke collection in the browser and sing along with synchronized lyrics.
 
 ## Features
 
-- **CDG Graphics Rendering** - Full support for CDG (CD+Graphics) karaoke files with synchronized lyrics display
+- **Multi-Format Support** - CDG (CD+Graphics) for classic karaoke, LRC for text-based lyrics
 - **Themed Categories** - Organize songs by occasion: Christmas, Easter, Birthday, Halloween, Romance, Kids, Neon Party, and more
 - **Custom Categories** - Create your own categories with custom names, emojis, colors, and particle effects
 - **Bulk Import** - Import entire folders of karaoke files with automatic MP3+CDG pair detection
@@ -24,8 +24,8 @@ A modern, themed CDG+MP3 karaoke player built with React 19, TypeScript, and Vit
 
 ```bash
 # Clone the repository
-git clone https://github.com/yourusername/merry-karaoke.git
-cd merry-karaoke
+git clone https://github.com/yourusername/karaoke-stage.git
+cd karaoke-stage
 
 # Install dependencies
 npm install
@@ -52,13 +52,14 @@ The built files will be in the `dist/` folder.
 2. **Folder Import** (Chrome/Edge): Click "Select Folder" to import multiple songs at once
 3. **Single Upload**: Select an MP3 and CDG file pair, enter a title, and choose categories
 
-### Karaoke File Format
+### Supported Formats
 
-This app uses the CDG+MP3 format, which is the standard for karaoke:
-- `.mp3` - The audio track (backing music)
-- `.cdg` - The graphics file (synchronized lyrics)
+| Format | Description | File Types |
+|--------|-------------|------------|
+| **CDG** | Classic karaoke with graphics | `.mp3` + `.cdg` |
+| **LRC** | Text-based lyrics (coming soon) | `.mp3` + `.lrc` |
 
-Both files must have the same base name (e.g., `song.mp3` and `song.cdg`).
+For CDG format, both files must have the same base name (e.g., `song.mp3` and `song.cdg`).
 
 ### Organizing Songs
 
@@ -87,12 +88,17 @@ Click the gear icon to access:
 ## Project Structure
 
 ```
-merry-karaoke/
+karaoke-stage/
 ├── components/
 │   ├── Atmosphere.tsx    # Falling particle effects
 │   ├── KaraokeStage.tsx  # Main karaoke player
 │   ├── SettingsModal.tsx # Settings UI
 │   └── SongCard.tsx      # Song list item
+├── formats/
+│   ├── types.ts          # Renderer interfaces
+│   ├── CdgRenderer.ts    # CDG format support
+│   ├── LrcRenderer.ts    # LRC format support
+│   └── index.ts          # Format factory
 ├── utils/
 │   ├── categoryMatcher.ts # Keyword-based categorization
 │   └── folderImport.ts    # Folder scanning logic
@@ -101,6 +107,14 @@ merry-karaoke/
 ├── types.ts              # TypeScript types
 └── index.tsx             # Entry point
 ```
+
+## Deployment Options
+
+Karaoke Stage can be deployed in multiple ways:
+
+- **Static hosting** - Build and deploy to any static host (Netlify, Vercel, GitHub Pages)
+- **Docker container** - `docker run karaoke-stage` (coming soon)
+- **Desktop app** - Via Electron or Tauri (coming soon)
 
 ## Browser Support
 

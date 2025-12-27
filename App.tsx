@@ -9,8 +9,11 @@ import { THEMES } from './constants';
 import { pickAndScanFolder, importSongPairs, isFolderPickerSupported, ImportProgress, ImportResult, SongPair } from './utils/folderImport';
 
 // --- Improved Singleton IndexedDB Utility ---
+// Note: Keeping legacy DB name for backwards compatibility with existing installations
 const DB_NAME = 'MerryMelodiesDB_v1';
 const STORE_NAME = 'songs';
+const SETTINGS_KEY = 'karaoke_stage_settings_v1';
+const LEGACY_SETTINGS_KEY = 'mm_settings_v7';  // For migration
 let dbInstance: IDBDatabase | null = null;
 
 const getDB = (): Promise<IDBDatabase> => {
@@ -62,10 +65,10 @@ const App: React.FC = () => {
       customCategories: []
     };
     try {
-      const saved = localStorage.getItem('mm_settings_v7');
+      // Try new key first, then fall back to legacy key for migration
+      const saved = localStorage.getItem(SETTINGS_KEY) || localStorage.getItem(LEGACY_SETTINGS_KEY);
       if (saved) {
         const parsed = JSON.parse(saved);
-
         return { ...defaults, ...parsed };
       }
     } catch (e) {
@@ -142,7 +145,7 @@ const App: React.FC = () => {
   }, []);
 
   useEffect(() => {
-    localStorage.setItem('mm_settings_v7', JSON.stringify(settings));
+    localStorage.setItem(SETTINGS_KEY, JSON.stringify(settings));
   }, [settings]);
 
   // Get visible themes (excluding hidden ones, but always show 'classic')
