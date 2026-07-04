@@ -1,5 +1,5 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { UserSettings, CategoryDisplayMode, CustomCategory, ParticleType, ThemeConfig } from '../types';
 import { THEMES } from '../constants';
 
@@ -52,6 +52,15 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSetting
     particleType: 'star'
   });
   const [editingCategory, setEditingCategory] = useState<string | null>(null);
+
+  // Close on Escape
+  useEffect(() => {
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') onClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+  }, [onClose]);
 
   const handleDarkModeToggle = () => {
     onUpdateSettings({ ...settings, darkMode: !settings.darkMode });
@@ -120,9 +129,14 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSetting
 
   return (
     <div className="fixed inset-0 z-[600] flex items-center justify-center p-4 bg-black/90 backdrop-blur-md">
-      <div className={`${settings.darkMode ? 'bg-slate-900' : 'bg-white'} border ${settings.darkMode ? 'border-white/10' : 'border-gray-200'} rounded-[2rem] p-6 max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col relative`}>
-        <button 
-          onClick={onClose} 
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Settings"
+        className={`${settings.darkMode ? 'bg-slate-900' : 'bg-white'} border ${settings.darkMode ? 'border-white/10' : 'border-gray-200'} rounded-[2rem] p-6 max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col relative`}>
+        <button
+          onClick={onClose}
+          aria-label="Close"
           className={`absolute top-5 right-5 text-2xl ${settings.darkMode ? 'opacity-50 hover:opacity-100' : 'text-gray-400 hover:text-gray-600'}`}
         >
           ×

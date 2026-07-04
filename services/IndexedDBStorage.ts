@@ -114,10 +114,12 @@ class IndexedDBStorage implements StorageService {
     const db = this.getDB();
     const id = songData.id || generateSongId();
 
+    // Only lyricsData is written; the legacy cdgData field is read-side
+    // fallback only — persisting both would store every CDG file twice
     const persistentData: StoredSong = {
       ...songData,
       id,
-      cdgData: songData.lyricsFormat === 'cdg' ? songData.lyricsData as Uint8Array : undefined,
+      cdgData: undefined,
     };
 
     return new Promise((resolve, reject) => {
@@ -155,6 +157,8 @@ class IndexedDBStorage implements StorageService {
         const song = request.result;
         if (song) {
           song.title = title;
+          // Migrate legacy records that stored the CDG bytes twice
+          if (song.lyricsData && song.cdgData) delete song.cdgData;
           store.put(song);
         }
       };
@@ -176,8 +180,9 @@ class IndexedDBStorage implements StorageService {
         const song = request.result;
         if (song) {
           song.themeIds = themeIds;
-          // Clean up legacy field
+          // Clean up legacy fields
           delete song.themeId;
+          if (song.lyricsData && song.cdgData) delete song.cdgData;
           store.put(song);
         }
       };

@@ -46,7 +46,8 @@ export class LrcRenderer implements KaraokeRenderer {
   private parse(text: string): void {
     this.lines = [];
     this.metadata = {};
-    
+    this.offsetMs = 0;
+
     const lines = text.split(/\r?\n/);
     
     for (const line of lines) {
@@ -88,23 +89,34 @@ export class LrcRenderer implements KaraokeRenderer {
       }
       
       if (timestamps.length === 0) continue;
-      
+
       const lyrics = trimmed.slice(lastIndex).trim();
-      if (!lyrics) continue;
-      
+      // Timed empty lines are kept: they blank the display during instrumental breaks
+
       // Parse word-level timing if present (enhanced LRC)
-      const words = this.parseWordTimings(lyrics);
-      
-      // Add a line entry for each timestamp (some LRC files repeat lines)
+      const words = lyrics ? this.parseWordTimings(lyrics, timestamps[0]) : null;
+
+      // Add a line entry for each timestamp (some LRC files repeat lines).
+      // Words are cloned per entry so the offset pass below adjusts each once.
       for (const time of timestamps) {
         this.lines.push({
-          time: time + this.offsetMs / 1000,
+          time,
           text: words ? words.map(w => w.text).join('') : lyrics,
-          words: words || undefined
+          words: words ? words.map(w => ({ ...w })) : undefined
         });
       }
     }
-    
+
+    // Apply [offset:] uniformly after parsing — the tag may legally appear
+    // anywhere in the file. Positive offset shifts lyrics EARLIER by convention.
+    if (this.offsetMs !== 0) {
+      const offsetSec = this.offsetMs / 1000;
+      for (const line of this.lines) {
+        line.time -= offsetSec;
+        line.words?.forEach(w => { w.time -= offsetSec; });
+      }
+    }
+
     // Sort by time
     this.lines.sort((a, b) => a.time - b.time);
   }
@@ -113,22 +125,25 @@ export class LrcRenderer implements KaraokeRenderer {
    * Parse enhanced LRC word timings
    * Format: <mm:ss.xx>word <mm:ss.xx>word
    */
-  private parseWordTimings(text: string): { time: number; text: string }[] | null {
+  private parseWordTimings(text: string, lineTime: number): { time: number; text: string }[] | null {
     const wordRegex = /<(\d{1,2}):(\d{2})(?:\.(\d{1,3}))?>/g;
     const words: { time: number; text: string }[] = [];
-    
+
     let match;
     let lastIndex = 0;
-    
+
     while ((match = wordRegex.exec(text)) !== null) {
       // Get text before this timestamp (belongs to previous word or is whitespace)
-      if (lastIndex > 0) {
-        const textBefore = text.slice(lastIndex, match.index);
-        if (words.length > 0 && textBefore) {
+      const textBefore = text.slice(lastIndex, match.index);
+      if (textBefore) {
+        if (words.length > 0) {
           words[words.length - 1].text += textBefore;
+        } else {
+          // Text before the first word tag is sung from the line start
+          words.push({ time: lineTime, text: textBefore });
         }
       }
-      
+
       const minutes = parseInt(match[1], 10);
       const seconds = parseInt(match[2], 10);
       const centiseconds = match[3] ? parseInt(match[3].padEnd(3, '0').slice(0, 3), 10) : 0;
@@ -195,10 +210,13 @@ export class LrcRenderer implements KaraokeRenderer {
     const nextLine = this.lines[currentIndex + 1];
     const prevLine = currentIndex > 0 ? this.lines[currentIndex - 1] : undefined;
     
-    // Calculate progress through current line
+    // Calculate progress through current line; duplicate consecutive
+    // timestamps would divide by zero, so treat those as complete
     const lineStart = currentLine.time;
     const lineEnd = nextLine?.time ?? (lineStart + 5); // Assume 5 seconds if last line
-    const lineProgress = Math.min(1, (timeSeconds - lineStart) / (lineEnd - lineStart));
+    const lineProgress = lineEnd > lineStart
+      ? Math.min(1, (timeSeconds - lineStart) / (lineEnd - lineStart))
+      : 1;
     
     // Calculate current word index if word timing available
     let currentWordIndex: number | undefined;
@@ -217,6 +235,7 @@ export class LrcRenderer implements KaraokeRenderer {
         previousLine: prevLine?.text,
         currentLine: currentLine.text,
         nextLine: nextLine?.text,
+        words: currentLine.words?.map(w => w.text),
         currentWordIndex,
         lineProgress
       }

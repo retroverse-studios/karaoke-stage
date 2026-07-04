@@ -31,7 +31,9 @@ export interface LyricsDisplay {
   currentLine: string;
   /** Next line (for preparation) */
   nextLine?: string;
-  /** Word index within current line (for word-by-word highlighting) */
+  /** Timed text segments of the current line, in order (enhanced LRC only) */
+  words?: string[];
+  /** Index into `words` of the segment currently being sung */
   currentWordIndex?: number;
   /** Progress through current line (0-1) */
   lineProgress: number;

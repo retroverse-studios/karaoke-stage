@@ -39,8 +39,10 @@ export interface CustomCategory {
   particleType: ParticleType;
 }
 
-/** Supported karaoke lyrics/graphics formats */
-export type LyricsFormat = 'cdg' | 'lrc';
+import type { KaraokeFormatType } from './formats/types';
+
+/** Supported karaoke lyrics/graphics formats (alias of the formats module's type) */
+export type LyricsFormat = KaraokeFormatType;
 
 export interface Song {
   id: string;

@@ -29,43 +29,67 @@ export function detectPitch(
     return null;
   }
 
-  // Autocorrelation
-  const correlations = new Float32Array(bufferSize);
-  
-  for (let lag = 0; lag < bufferSize; lag++) {
+  // Convert frequency bounds to lag bounds
+  const minLag = Math.max(2, Math.floor(sampleRate / maxFreq));
+  const maxLag = Math.min(bufferSize - 2, Math.ceil(sampleRate / minFreq));
+
+  // Autocorrelation, normalized by overlap length and computed only up to the
+  // lags we need (+1 for parabolic interpolation). Without normalization the
+  // shrinking overlap window biases toward short lags, causing octave-up errors.
+  const correlations = new Float32Array(maxLag + 2);
+
+  for (let lag = 0; lag <= maxLag + 1; lag++) {
     let sum = 0;
-    for (let i = 0; i < bufferSize - lag; i++) {
+    const overlap = bufferSize - lag;
+    for (let i = 0; i < overlap; i++) {
       sum += audioData[i] * audioData[i + lag];
     }
-    correlations[lag] = sum;
+    correlations[lag] = sum / overlap;
   }
 
-  // Find the first peak after the initial decline
-  // Convert frequency bounds to lag bounds
-  const minLag = Math.floor(sampleRate / maxFreq);
-  const maxLag = Math.ceil(sampleRate / minFreq);
+  // Skip the zero-lag main lobe: only start searching once the correlation has
+  // dipped below zero, so broadband noise doesn't register as a high pitch
+  let searchStart = minLag;
+  for (let lag = 1; lag <= maxLag; lag++) {
+    if (correlations[lag] < 0) {
+      searchStart = Math.max(searchStart, lag);
+      break;
+    }
+  }
+
+  // For a periodic signal every multiple of the true period correlates equally
+  // well, so the global max can land on a subharmonic (octave-down error).
+  // Instead, take the SHORTEST-lag local peak that comes close to the global max.
+  let globalMax = -Infinity;
+  for (let lag = searchStart; lag <= maxLag; lag++) {
+    if (correlations[lag] > globalMax) {
+      globalMax = correlations[lag];
+    }
+  }
 
   let bestLag = -1;
   let bestCorrelation = -1;
-
-  // Find the peak correlation within our frequency range
-  for (let lag = minLag; lag < maxLag && lag < bufferSize; lag++) {
-    if (correlations[lag] > bestCorrelation) {
-      bestCorrelation = correlations[lag];
+  for (let lag = searchStart; lag <= maxLag; lag++) {
+    const isLocalPeak =
+      correlations[lag] >= correlations[lag - 1] &&
+      correlations[lag] >= correlations[lag + 1];
+    if (isLocalPeak && correlations[lag] >= globalMax * 0.9) {
       bestLag = lag;
+      bestCorrelation = correlations[lag];
+      break;
     }
   }
 
-  // Validate that we found a good peak
+  // Validate that we found a good peak (correlations[0] is the signal energy)
   if (bestLag === -1 || bestCorrelation < correlations[0] * 0.3) {
     return null;
   }
 
   // Parabolic interpolation for sub-sample accuracy
-  const prev = correlations[bestLag - 1] || 0;
+  const prev = correlations[bestLag - 1];
   const curr = correlations[bestLag];
-  const next = correlations[bestLag + 1] || 0;
-  
+  const next = correlations[bestLag + 1];
+
   const shift = (prev - next) / (2 * (prev - 2 * curr + next));
   const refinedLag = bestLag + (isFinite(shift) ? shift : 0);
 
@@ -94,7 +118,9 @@ export function frequencyToNote(frequency: number): { note: string; octave: numb
   
   // Calculate note index and octave
   const noteIndex = (roundedSemitones + 9 + 12 * 10) % 12; // +9 because A is index 9
-  const octave = Math.floor((A4_INDEX + roundedSemitones - 1) / 12);
+  // Piano key number of the target note is A4_INDEX + semitones; octaves
+  // change at C, which is key 4 of each octave block (A0=1, B0=3, C1=4)
+  const octave = Math.floor((A4_INDEX + roundedSemitones + 8) / 12);
   
   return {
     note: noteNames[noteIndex],

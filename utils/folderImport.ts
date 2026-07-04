@@ -1,10 +1,17 @@
 import { ThemeId } from '../types';
 import { matchCategories } from './categoryMatcher';
 
+// File System Access API (WICG) — not yet in TypeScript's DOM lib
+declare global {
+  interface Window {
+    showDirectoryPicker?: (options?: { mode?: 'read' | 'readwrite' }) => Promise<FileSystemDirectoryHandle>;
+  }
+}
+
 export interface SongPair {
   name: string;        // Song name (from folder or file name)
   mp3File: File;
-  cdgFile: File;
+  lyricsFile: File;    // .cdg or .lrc
   suggestedCategories: ThemeId[];
 }
 
@@ -43,6 +50,7 @@ async function scanDirectory(
 ): Promise<void> {
   const mp3Files: Map<string, File> = new Map();
   const cdgFiles: Map<string, File> = new Map();
+  const lrcFiles: Map<string, File> = new Map();
   const subdirs: FileSystemDirectoryHandle[] = [];
 
   // First pass: collect files and subdirectories
@@ -57,29 +65,39 @@ async function scanDirectory(
         mp3Files.set(baseName, file);
       } else if (nameLower.endsWith('.cdg')) {
         cdgFiles.set(baseName, file);
+      } else if (nameLower.endsWith('.lrc')) {
+        lrcFiles.set(baseName, file);
       }
     } else if (entry.kind === 'directory') {
       subdirs.push(entry as FileSystemDirectoryHandle);
     }
   }
 
-  // Match mp3+cdg pairs
+  // Match each MP3 with a lyrics file of the same base name (CDG preferred over LRC)
+  const found: { mp3File: File; lyricsFile: File }[] = [];
   for (const [baseName, mp3File] of mp3Files) {
-    const cdgFile = cdgFiles.get(baseName);
-    if (cdgFile) {
-      // Found a pair! Use folder name if at depth > 0, otherwise use file name
-      const songName = depth > 0 ? dirHandle.name : mp3File.name.replace(/\.[^/.]+$/, '');
-      const cleanName = songName.replace(/ - \d+$/, '').trim();
-      
-      pairs.push({
-        name: cleanName,
-        mp3File,
-        cdgFile,
-        suggestedCategories: matchCategories(cleanName)
-      });
-      
-      onProgress?.(pairs.length);
+    const lyricsFile = cdgFiles.get(baseName) ?? lrcFiles.get(baseName);
+    if (lyricsFile) {
+      found.push({ mp3File, lyricsFile });
     }
+  }
+
+  for (const { mp3File, lyricsFile } of found) {
+    // A subfolder holding a single pair is usually named after the song;
+    // a folder with many pairs is an album — keep per-file names there
+    const songName = depth > 0 && found.length === 1
+      ? dirHandle.name
+      : mp3File.name.replace(/\.[^/.]+$/, '');
+    const cleanName = songName.replace(/ - \d+$/, '').trim();
+
+    pairs.push({
+      name: cleanName,
+      mp3File,
+      lyricsFile,
+      suggestedCategories: matchCategories(cleanName)
+    });
+
+    onProgress?.(pairs.length);
   }
 
   // Recurse into subdirectories (limit depth to prevent infinite loops)
@@ -96,12 +114,12 @@ async function scanDirectory(
 export async function pickAndScanFolder(
   onProgress?: (progress: ImportProgress) => void
 ): Promise<SongPair[]> {
-  if (!isFolderPickerSupported()) {
+  if (!window.showDirectoryPicker) {
     throw new Error('Folder picker not supported in this browser. Please use Chrome or Edge.');
   }
 
   // Show folder picker
-  const dirHandle = await (window as any).showDirectoryPicker({
+  const dirHandle = await window.showDirectoryPicker({
     mode: 'read'
   });
 
@@ -133,7 +151,7 @@ export async function pickAndScanFolder(
  */
 export async function importSongPairs(
   pairs: SongPair[],
-  saveSong: (name: string, mp3: File, cdg: File, categories: ThemeId[]) => Promise<boolean>,
+  saveSong: (name: string, mp3: File, lyrics: File, categories: ThemeId[]) => Promise<boolean>,
   onProgress?: (progress: ImportProgress) => void
 ): Promise<ImportResult> {
   const result: ImportResult = {
@@ -162,7 +180,7 @@ export async function importSongPairs(
         ? pair.suggestedCategories 
         : [];
       
-      const success = await saveSong(pair.name, pair.mp3File, pair.cdgFile, categories);
+      const success = await saveSong(pair.name, pair.mp3File, pair.lyricsFile, categories);
       
       if (success) {
         result.imported++;

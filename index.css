@@ -1,0 +1,29 @@
+@import "tailwindcss";
+
+body {
+  font-family: 'Quicksand', sans-serif;
+  margin: 0;
+  padding: 0;
+  overflow-x: hidden;
+  background: #0a0f1d;
+  color: white;
+}
+
+.font-holiday {
+  font-family: 'Mountains of Christmas', cursive;
+}
+
+@keyframes snowfall {
+  0% { transform: translateY(-10vh) translateX(0); opacity: 1; }
+  100% { transform: translateY(110vh) translateX(20px); opacity: 0.3; }
+}
+
+.snowflake {
+  position: fixed;
+  top: -10vh;
+  color: white;
+  user-select: none;
+  z-index: 0;
+  pointer-events: none;
+  animation: snowfall linear infinite;
+}

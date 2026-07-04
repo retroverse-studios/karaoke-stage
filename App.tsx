@@ -15,7 +15,6 @@ import { ThemeId, ThemeConfig } from './types';
 import { SongMetadata } from './services';
 import { useSettings } from './hooks/useSettings';
 import { useSongLibrary } from './hooks/useSongLibrary';
-import { storage } from './services';
 
 const App: React.FC = () => {
   // Use extracted hooks
@@ -37,7 +36,8 @@ const App: React.FC = () => {
     clearCurrentSong,
     deleteSong,
     renameSong,
-    changeSongCategories
+    changeSongCategories,
+    addSong
   } = useSongLibrary();
 
   // Local UI state
@@ -64,34 +64,22 @@ const App: React.FC = () => {
 
   // Handler for bulk import (used by UploadModal)
   const handleBulkImport = async (
-    name: string, 
-    mp3File: File, 
-    cdgFile: File, 
+    name: string,
+    mp3File: File,
+    lyricsFile: File,
     categories: ThemeId[]
   ): Promise<boolean> => {
     try {
-      const buffer = await cdgFile.arrayBuffer();
-      const lyricsData = new Uint8Array(buffer);
-      
-      const themeIds = categories.length > 0 
-        ? categories 
+      const themeIds: ThemeId[] = categories.length > 0
+        ? categories
         : [settings.themeId === 'classic' ? 'christmas' : settings.themeId];
 
-      await storage.saveSong({
+      await addSong({
         title: name,
-        duration: 0,
-        difficulty: 'Medium',
-        description: 'Custom Track',
-        audioBlob: mp3File,
-        lyricsFormat: 'cdg',
-        lyricsData,
-        isCustom: true,
+        audioFile: mp3File,
+        lyricsFile,
         themeIds
       });
-
-      // Reload page to refresh song list
-      // TODO: Add a refresh method to useSongLibrary for better UX
-      window.location.reload();
       return true;
     } catch (err) {
       console.error("Failed to save song", err);

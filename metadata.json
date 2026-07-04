@@ -1,7 +1,0 @@
-{
-  "name": "MerryMelodies: Christmas Carol Karaoke",
-  "description": "A festive, browser-based karaoke application featuring a library of classic Christmas carols with synchronized lyrics, backing tracks, and a cozy holiday atmosphere.",
-  "requestFramePermissions": [
-    "microphone"
-  ]
-}

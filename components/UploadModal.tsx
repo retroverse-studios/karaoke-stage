@@ -4,7 +4,7 @@
  * Modal for uploading songs - supports both folder import and single file upload.
  */
 
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import { ThemeId, ThemeConfig } from '../types';
 import { pickAndScanFolder, importSongPairs, isFolderPickerSupported, ImportProgress, ImportResult } from '../utils/folderImport';
 import { SongMetadata } from '../services';
@@ -13,7 +13,7 @@ interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
   onSongAdded: (metadata: SongMetadata, playImmediately?: { audioFile: File; cdgData: Uint8Array }) => void;
-  onBulkImport: (name: string, mp3File: File, cdgFile: File, categories: ThemeId[]) => Promise<boolean>;
+  onBulkImport: (name: string, mp3File: File, lyricsFile: File, categories: ThemeId[]) => Promise<boolean>;
   allThemes: Record<string, ThemeConfig>;
   activeTheme: ThemeConfig;
   currentThemeId: ThemeId;
@@ -31,7 +31,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
   isDark
 }) => {
   const [isProcessing, setIsProcessing] = useState(false);
-  const [stagedFiles, setStagedFiles] = useState<{ audio?: File; cdg?: File }>({});
+  const [stagedFiles, setStagedFiles] = useState<{ audio?: File; lyrics?: File }>({});
   const [uploadTitle, setUploadTitle] = useState('');
   const [uploadCategories, setUploadCategories] = useState<ThemeId[]>([]);
   
@@ -39,9 +39,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
   const [folderImportResult, setFolderImportResult] = useState<ImportResult | null>(null);
 
   const audioFileRef = useRef<HTMLInputElement>(null);
-  const cdgFileRef = useRef<HTMLInputElement>(null);
-
-  if (!isOpen) return null;
+  const lyricsFileRef = useRef<HTMLInputElement>(null);
 
   const handleClose = () => {
     setUploadTitle('');
@@ -52,10 +50,23 @@ const UploadModal: React.FC<UploadModalProps> = ({
     onClose();
   };
 
-  const handleFileChange = (type: 'audio' | 'cdg') => {
-    const file = type === 'audio' 
-      ? audioFileRef.current?.files?.[0] 
-      : cdgFileRef.current?.files?.[0];
+  // Close on Escape while open
+  useEffect(() => {
+    if (!isOpen) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === 'Escape') handleClose();
+    };
+    window.addEventListener('keydown', onKey);
+    return () => window.removeEventListener('keydown', onKey);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [isOpen]);
+
+  if (!isOpen) return null;
+
+  const handleFileChange = (type: 'audio' | 'lyrics') => {
+    const file = type === 'audio'
+      ? audioFileRef.current?.files?.[0]
+      : lyricsFileRef.current?.files?.[0];
     
     if (file) {
       setStagedFiles(prev => ({ ...prev, [type]: file }));
@@ -68,24 +79,21 @@ const UploadModal: React.FC<UploadModalProps> = ({
   };
 
   const handleFileUpload = async () => {
-    const { audio, cdg } = stagedFiles;
-    if (!audio || !cdg) {
+    const { audio, lyrics } = stagedFiles;
+    if (!audio || !lyrics) {
       alert("Missing files!");
       return;
     }
 
     setIsProcessing(true);
     try {
-      const buffer = await cdg.arrayBuffer();
-      const cdgData = new Uint8Array(buffer);
-
       const title = uploadTitle.trim() || audio.name.replace(/\.[^/.]+$/, "").replace(/ - \d+$/, "");
-      const themeIds = uploadCategories.length > 0 
-        ? uploadCategories 
+      const themeIds = uploadCategories.length > 0
+        ? uploadCategories
         : [currentThemeId === 'classic' ? 'christmas' : currentThemeId];
 
       // Call parent's bulk import which handles storage
-      const success = await onBulkImport(title, audio, cdg, themeIds);
+      const success = await onBulkImport(title, audio, lyrics, themeIds);
       
       if (success) {
         setStagedFiles({});
@@ -118,7 +126,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
       });
 
       if (pairs.length === 0) {
-        alert('No MP3+CDG pairs found in the selected folder.');
+        alert('No MP3+CDG or MP3+LRC pairs found in the selected folder.');
         setFolderImportProgress(null);
         return;
       }
@@ -152,11 +160,16 @@ const UploadModal: React.FC<UploadModalProps> = ({
 
   return (
     <div className="fixed inset-0 z-[500] flex items-center justify-center p-6 bg-black/90 backdrop-blur-md">
-      <div className={`rounded-[2.5rem] p-8 max-w-lg w-full relative max-h-[90vh] overflow-y-auto ${
+      <div
+        role="dialog"
+        aria-modal="true"
+        aria-label="Add Songs"
+        className={`rounded-[2.5rem] p-8 max-w-lg w-full relative max-h-[90vh] overflow-y-auto ${
         isDark ? 'bg-slate-900 border border-white/10' : 'bg-white border border-gray-200'
       }`}>
-        <button 
-          onClick={handleClose} 
+        <button
+          onClick={handleClose}
+          aria-label="Close"
           className={`absolute top-6 right-6 text-2xl ${
             isDark ? 'opacity-50 hover:opacity-100' : 'text-gray-400 hover:text-gray-600'
           }`}
@@ -185,7 +198,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
                 Import from Folder
               </h3>
               <p className={`text-xs ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                Scan a folder for MP3+CDG pairs
+                Scan a folder for MP3+CDG/LRC pairs
               </p>
             </div>
           </div>
@@ -277,14 +290,14 @@ const UploadModal: React.FC<UploadModalProps> = ({
           
           <div className={`p-4 rounded-2xl border ${isDark ? 'bg-white/5 border-white/10' : 'bg-gray-50 border-gray-200'}`}>
             <p className={`text-[10px] uppercase tracking-tighter mb-2 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-              2. Graphics File (CDG)
+              2. Lyrics File (CDG or LRC)
             </p>
-            <input 
-              type="file" 
-              accept=".cdg" 
-              ref={cdgFileRef} 
-              onChange={() => handleFileChange('cdg')} 
-              className="text-xs w-full" 
+            <input
+              type="file"
+              accept=".cdg,.lrc"
+              ref={lyricsFileRef}
+              onChange={() => handleFileChange('lyrics')}
+              className="text-xs w-full"
             />
           </div>
           
@@ -350,8 +363,8 @@ const UploadModal: React.FC<UploadModalProps> = ({
           </div>
         </div>
 
-        <button 
-          disabled={isProcessing || !stagedFiles.audio || !stagedFiles.cdg}
+        <button
+          disabled={isProcessing || !stagedFiles.audio || !stagedFiles.lyrics}
           onClick={handleFileUpload}
           className={`w-full py-4 rounded-2xl font-bold disabled:opacity-20 ${
             isDark ? 'bg-white text-black' : 'bg-gray-900 text-white'

@@ -27,9 +27,12 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
   
   const audioRef = useRef<HTMLAudioElement | null>(null);
   const canvasRef = useRef<HTMLCanvasElement | null>(null);
+  const ctxRef = useRef<CanvasRenderingContext2D | null>(null);
   const rafRef = useRef<number | null>(null);
   const rendererRef = useRef<KaraokeRenderer | null>(null);
   const audioConnectedRef = useRef(false);
+  const lastLyricsKeyRef = useRef('');
+  const lastTimeUpdateRef = useRef(0);
 
   // Pitch detection hook
   const {
@@ -74,14 +77,16 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
     };
   }, [song.id, song.lyricsData, song.cdgData, song.lyricsFormat]);
 
-  // Connect audio element for pitch detection when it's ready
+  // Connect audio element for pitch detection once the mic is on.
+  // Connecting eagerly would route playback through an AudioContext created
+  // outside a user gesture, which autoplay policy may leave suspended — silencing the song.
   useEffect(() => {
     const audio = audioRef.current;
-    if (audio && isReady && !audioConnectedRef.current) {
+    if (audio && isReady && pitch.micEnabled && !audioConnectedRef.current) {
       connectReferenceAudio(audio);
       audioConnectedRef.current = true;
     }
-  }, [isReady, connectReferenceAudio]);
+  }, [isReady, pitch.micEnabled, connectReferenceAudio]);
 
   const renderFrame = useCallback((time: number) => {
     const renderer = rendererRef.current;
@@ -91,33 +96,35 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
     if (!result.hasContent) return;
 
     if (isGraphics && result.imageData) {
-      // Graphics format (CDG) - render to canvas
+      // Graphics format (CDG) - render to canvas. putImageData is synchronous,
+      // so frames can't land out of order and nothing is left for GC
       const canvas = canvasRef.current;
       if (!canvas) return;
-      
-      const ctx = canvas.getContext('2d');
-      if (!ctx) return;
 
-      // Use createImageBitmap for better performance
-      createImageBitmap(result.imageData)
-        .then(bitmap => {
-          ctx.clearRect(0, 0, canvas.width, canvas.height);
-          ctx.drawImage(bitmap, 0, 0, canvas.width, canvas.height);
-        })
-        .catch(() => {
-          // Fallback to putImageData if createImageBitmap fails
-          ctx.putImageData(result.imageData!, 0, 0);
-        });
+      if (!ctxRef.current) {
+        ctxRef.current = canvas.getContext('2d');
+      }
+      ctxRef.current?.putImageData(result.imageData, 0, 0);
     } else if (result.lyrics) {
-      // Text format (LRC) - update lyrics state
-      setLyrics(result.lyrics);
+      // Text format (LRC) — only push through React state when the visible
+      // content changes, not on every animation frame
+      const l = result.lyrics;
+      const key = `${l.currentLine}|${l.currentWordIndex ?? -1}|${Math.round(l.lineProgress * 50)}`;
+      if (key !== lastLyricsKeyRef.current) {
+        lastLyricsKeyRef.current = key;
+        setLyrics(l);
+      }
     }
   }, [isGraphics]);
 
   const tick = useCallback(() => {
     if (!audioRef.current) return;
     const time = audioRef.current.currentTime;
-    setCurrentTime(time);
+    // The m:ss clock and progress bar don't need 60 Hz re-renders
+    if (Math.abs(time - lastTimeUpdateRef.current) > 0.25) {
+      lastTimeUpdateRef.current = time;
+      setCurrentTime(time);
+    }
     renderFrame(time);
     rafRef.current = requestAnimationFrame(tick);
   }, [renderFrame]);
@@ -148,9 +155,16 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
   }, []);
 
   const seek = (time: number) => {
-    if (audioRef.current) {
-      audioRef.current.currentTime = Math.max(0, Math.min(duration, time));
-    }
+    const audio = audioRef.current;
+    if (!audio) return;
+    // The duration state is 0 until loadedmetadata; fall back to the element's
+    const max = duration || audio.duration || 0;
+    const t = Math.max(0, Math.min(max, time));
+    audio.currentTime = t;
+    // Keep the display in sync when paused — the rAF loop isn't running then
+    lastTimeUpdateRef.current = t;
+    setCurrentTime(t);
+    renderFrame(t);
   };
 
   const handleSongEnd = () => {
@@ -163,7 +177,10 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
     resetStats();
     if (audioRef.current) {
       audioRef.current.currentTime = 0;
-      audioRef.current.play().then(() => setIsPlaying(true));
+      audioRef.current.play().then(() => setIsPlaying(true)).catch((e: Error) => {
+        console.error("Playback blocked", e);
+        setError("Interaction required. Click play to start!");
+      });
     }
   };
 
@@ -201,14 +218,15 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
             textShadow: `0 0 30px ${theme.primaryHex}, 0 0 60px ${theme.primaryHex}40`
           }}
         >
-          {lyrics.currentWordIndex !== undefined ? (
-            // Word-by-word highlighting for enhanced LRC
-            lyrics.currentLine.split(/(\s+)/).map((word: string, i: number) => (
-              <span 
-                key={i} 
-                className={i <= lyrics.currentWordIndex! * 2 ? 'opacity-100' : 'opacity-40'}
+          {lyrics.words ? (
+            // Word-by-word highlighting for enhanced LRC \u2014 the renderer's timed
+            // segments may be syllables, so render those rather than re-splitting text
+            lyrics.words.map((segment: string, i: number) => (
+              <span
+                key={i}
+                className={i <= (lyrics.currentWordIndex ?? -1) ? 'opacity-100' : 'opacity-40'}
               >
-                {word}
+                {segment}
               </span>
             ))
           ) : (
@@ -295,6 +313,13 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
         </div>
       </div>
 
+      {/* Mic error banner */}
+      {pitch.error && (
+        <div className="relative z-20 self-center bg-red-600/90 text-white text-sm font-bold px-6 py-2 rounded-full mb-2">
+          {pitch.error}
+        </div>
+      )}
+
       {/* Main content area */}
       <div className="flex-1 flex flex-col items-center justify-center relative z-10">
         <div 
@@ -362,7 +387,20 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
       <div className="max-w-4xl w-full mx-auto mt-6 bg-slate-900/90 backdrop-blur-3xl p-6 rounded-[2.5rem] border border-white/10 shadow-2xl relative z-30">
         <div className="flex items-center space-x-6 mb-4 px-2">
           <span className="text-[10px] font-mono text-gray-500 w-12 text-right">{Math.floor(currentTime / 60)}:{(Math.floor(currentTime % 60)).toString().padStart(2, '0')}</span>
-          <div className="flex-1 h-3 bg-black/60 rounded-full overflow-hidden cursor-pointer" onClick={(e: React.MouseEvent<HTMLDivElement>) => {
+          <div
+            className="flex-1 h-3 bg-black/60 rounded-full overflow-hidden cursor-pointer"
+            role="slider"
+            tabIndex={0}
+            aria-label="Seek"
+            aria-valuemin={0}
+            aria-valuemax={Math.round(duration)}
+            aria-valuenow={Math.round(currentTime)}
+            aria-valuetext={`${Math.floor(currentTime / 60)}:${(Math.floor(currentTime % 60)).toString().padStart(2, '0')}`}
+            onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+              if (e.key === 'ArrowRight') { e.preventDefault(); seek(currentTime + 5); }
+              if (e.key === 'ArrowLeft') { e.preventDefault(); seek(currentTime - 5); }
+            }}
+            onClick={(e: React.MouseEvent<HTMLDivElement>) => {
             const rect = e.currentTarget.getBoundingClientRect();
             seek(((e.clientX - rect.left) / rect.width) * duration);
           }}>

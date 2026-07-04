@@ -8,6 +8,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { Song, ThemeId } from '../types';
 import { storage, SongMetadata } from '../services';
+import { detectFormat } from '../formats';
 
 export interface UseSongLibraryReturn {
   /** All songs in the library (metadata only) */
@@ -30,7 +31,7 @@ export interface UseSongLibraryReturn {
   addSong: (data: {
     title: string;
     audioFile: File;
-    cdgFile: File;
+    lyricsFile: File;
     themeIds: ThemeId[];
   }) => Promise<SongMetadata>;
   /** Filter songs by search term and theme */
@@ -73,15 +74,21 @@ export function useSongLibrary(): UseSongLibraryReturn {
   }, []);
 
   const clearCurrentSong = useCallback(() => {
-    setCurrentSong(null);
+    setCurrentSong(prev => {
+      // Release the blob URL so the MP3 isn't pinned in memory for the session
+      if (prev?.audioUrl) URL.revokeObjectURL(prev.audioUrl);
+      return null;
+    });
   }, []);
 
   const deleteSong = useCallback(async (id: string) => {
     // Optimistic UI update
     setSongs(prev => prev.filter(s => s.id !== id));
-    if (currentSong?.id === id) {
-      setCurrentSong(null);
-    }
+    setCurrentSong(prev => {
+      if (prev?.id !== id) return prev;
+      if (prev.audioUrl) URL.revokeObjectURL(prev.audioUrl);
+      return null;
+    });
 
     // Persist to storage
     try {
@@ -89,7 +96,7 @@ export function useSongLibrary(): UseSongLibraryReturn {
     } catch (err) {
       console.error("Failed to delete song", err);
     }
-  }, [currentSong?.id]);
+  }, []);
 
   const renameSong = useCallback(async (id: string, newTitle: string) => {
     const trimmedTitle = newTitle.trim();
@@ -125,11 +132,18 @@ export function useSongLibrary(): UseSongLibraryReturn {
   const addSong = useCallback(async (data: {
     title: string;
     audioFile: File;
-    cdgFile: File;
+    lyricsFile: File;
     themeIds: ThemeId[];
   }): Promise<SongMetadata> => {
-    const buffer = await data.cdgFile.arrayBuffer();
-    const cdgData = new Uint8Array(buffer);
+    const format = detectFormat(data.lyricsFile.name);
+    if (!format) {
+      throw new Error(`Unsupported lyrics file: ${data.lyricsFile.name}`);
+    }
+
+    // CDG is binary; LRC is text
+    const lyricsData = format === 'cdg'
+      ? new Uint8Array(await data.lyricsFile.arrayBuffer())
+      : await data.lyricsFile.text();
 
     const metadata = await storage.saveSong({
       title: data.title,
@@ -137,8 +151,8 @@ export function useSongLibrary(): UseSongLibraryReturn {
       difficulty: 'Medium',
       description: 'Custom Track',
       audioBlob: data.audioFile,
-      lyricsFormat: 'cdg',
-      lyricsData: cdgData,
+      lyricsFormat: format,
+      lyricsData,
       isCustom: true,
       themeIds: data.themeIds
     });

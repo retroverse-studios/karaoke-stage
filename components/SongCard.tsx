@@ -49,7 +49,7 @@ const SongCard: React.FC<SongCardProps> = ({ song, onSelect, onDelete, onRename,
     setIsEditing(false);
   };
 
-  const handleCancelEdit = (e: React.MouseEvent) => {
+  const handleCancelEdit = (e: React.SyntheticEvent) => {
     e.preventDefault();
     e.stopPropagation();
     setEditTitle(song.title);
@@ -91,8 +91,17 @@ const SongCard: React.FC<SongCardProps> = ({ song, onSelect, onDelete, onRename,
   };
 
   return (
-    <div 
+    <div
       onClick={handleCardClick}
+      role="button"
+      tabIndex={0}
+      aria-label={`Perform ${song.title}`}
+      onKeyDown={(e) => {
+        if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+          e.preventDefault();
+          handleCardClick();
+        }
+      }}
       className={`backdrop-blur-xl rounded-[2rem] p-6 border transition-all cursor-pointer group relative shadow-xl ${showCategoryPicker ? 'overflow-visible z-50' : 'overflow-hidden'} ${
         isDark 
           ? 'bg-white/5 border-white/10 hover:bg-white/10' 
@@ -225,7 +234,7 @@ const SongCard: React.FC<SongCardProps> = ({ song, onSelect, onDelete, onRename,
               autoFocus
               onKeyDown={(e) => {
                 if (e.key === 'Escape') {
-                  handleCancelEdit(e as any);
+                  handleCancelEdit(e);
                 }
               }}
             />
@@ -255,7 +264,7 @@ const SongCard: React.FC<SongCardProps> = ({ song, onSelect, onDelete, onRename,
               {song.title}
             </h3>
             <p className={`text-[10px] font-mono uppercase tracking-widest mb-4 ${isDark ? 'text-gray-500' : 'text-gray-400'}`}>
-              MP3+CDG Pair
+              MP3+{(song.lyricsFormat || 'cdg').toUpperCase()} Pair
             </p>
           </>
         )}

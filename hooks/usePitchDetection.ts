@@ -88,10 +88,20 @@ export function usePitchDetection(): UsePitchDetectionReturn {
   const animationFrameRef = useRef<number | null>(null);
   const streakConfettiCallbackRef = useRef<(() => void) | null>(null);
   const lastStreakConfettiRef = useRef<number>(0);
+  // Streak lives in a ref because the analysis loop closure is created once
+  // (from enableMic) and would otherwise read a stale pitch.streak forever
+  const streakRef = useRef<number>(0);
+  const bestStreakRef = useRef<number>(0);
+  // Per-frame sample counts, flushed to React state at a lower rate
+  const statsAccumRef = useRef({ total: 0, inTune: 0 });
+  const frameCounterRef = useRef(0);
+  // Reused per-frame buffers (~8 KB each; allocating fresh ones 120x/sec is pure GC churn)
+  const micBufferRef = useRef<Float32Array | null>(null);
+  const refBufferRef = useRef<Float32Array | null>(null);
 
   // Initialize audio context
   const getAudioContext = useCallback(() => {
-    if (!audioContextRef.current) {
+    if (!audioContextRef.current || audioContextRef.current.state === 'closed') {
       audioContextRef.current = new AudioContext();
     }
     return audioContextRef.current;
@@ -109,8 +119,13 @@ export function usePitchDetection(): UsePitchDetectionReturn {
       });
       
       micStreamRef.current = stream;
-      
+
       const audioContext = getAudioContext();
+      // Runs inside a user gesture: safe place to resume a context that the
+      // browser's autoplay policy started in the suspended state
+      if (audioContext.state === 'suspended') {
+        await audioContext.resume();
+      }
       const source = audioContext.createMediaStreamSource(stream);
       const analyser = audioContext.createAnalyser();
       
@@ -161,12 +176,17 @@ export function usePitchDetection(): UsePitchDetectionReturn {
   const connectReferenceAudio = useCallback((audioElement: HTMLAudioElement) => {
     try {
       const audioContext = getAudioContext();
-      
+
       // Check if already connected
       if (refSourceRef.current) {
         return;
       }
-      
+
+      // A suspended context silences any element routed through it
+      if (audioContext.state === 'suspended') {
+        audioContext.resume();
+      }
+
       const source = audioContext.createMediaElementSource(audioElement);
       const analyser = audioContext.createAnalyser();
       
@@ -202,14 +222,20 @@ export function usePitchDetection(): UsePitchDetectionReturn {
       }
       
       // Get singer's pitch
-      const micBuffer = new Float32Array(micAnalyser.fftSize);
+      if (!micBufferRef.current || micBufferRef.current.length !== micAnalyser.fftSize) {
+        micBufferRef.current = new Float32Array(micAnalyser.fftSize);
+      }
+      const micBuffer = micBufferRef.current;
       micAnalyser.getFloatTimeDomainData(micBuffer);
       const singerPitch = detectPitch(micBuffer, audioContext.sampleRate);
-      
+
       // Get reference pitch (if available)
       let referencePitch: number | null = null;
       if (refAnalyser) {
-        const refBuffer = new Float32Array(refAnalyser.fftSize);
+        if (!refBufferRef.current || refBufferRef.current.length !== refAnalyser.fftSize) {
+          refBufferRef.current = new Float32Array(refAnalyser.fftSize);
+        }
+        const refBuffer = refBufferRef.current;
         refAnalyser.getFloatTimeDomainData(refBuffer);
         referencePitch = detectPitch(refBuffer, audioContext.sampleRate);
       }
@@ -223,50 +249,62 @@ export function usePitchDetection(): UsePitchDetectionReturn {
         direction = getPitchDirection(singerPitch, referencePitch);
       }
       
-      // Update pitch state
-      setPitch(prev => {
-        const isInTune = matchScore >= IN_TUNE_THRESHOLD;
-        const newStreak = isInTune ? prev.streak + 1 : 0;
-        
-        // Check for confetti trigger
-        if (newStreak > 0 && 
-            newStreak % STREAK_THRESHOLD_FOR_CONFETTI === 0 && 
-            newStreak !== lastStreakConfettiRef.current) {
-          lastStreakConfettiRef.current = newStreak;
-          streakConfettiCallbackRef.current?.();
-        }
-        
-        return {
+      const isInTune = matchScore >= IN_TUNE_THRESHOLD;
+      const newStreak = isInTune ? streakRef.current + 1 : 0;
+      streakRef.current = newStreak;
+      if (newStreak > bestStreakRef.current) {
+        bestStreakRef.current = newStreak;
+      }
+
+      // Check for confetti trigger
+      if (newStreak > 0 &&
+          newStreak % STREAK_THRESHOLD_FOR_CONFETTI === 0 &&
+          newStreak !== lastStreakConfettiRef.current) {
+        lastStreakConfettiRef.current = newStreak;
+        streakConfettiCallbackRef.current?.();
+      }
+
+      // Count stats — only when both singer and backing track have a detectable
+      // pitch; scoring instrumental/no-reference passages would penalize the singer
+      if (singerPitch && referencePitch) {
+        statsAccumRef.current.total++;
+        if (isInTune) statsAccumRef.current.inTune++;
+      }
+
+      // Flush to React state at ~15 Hz — re-rendering the whole stage at 60 Hz
+      // is wasted work for a meter and score readout
+      frameCounterRef.current++;
+      if (frameCounterRef.current % 4 === 0) {
+        setPitch(prev => ({
           ...prev,
           singerPitch,
           referencePitch,
           matchScore,
           direction,
           streak: newStreak,
-        };
-      });
-      
-      // Update stats (only if singer is producing sound)
-      if (singerPitch) {
-        setStats(prev => {
-          const isInTune = matchScore >= IN_TUNE_THRESHOLD;
-          const newTotal = prev.totalSamples + 1;
-          const newInTune = isInTune ? prev.inTuneSamples + 1 : prev.inTuneSamples;
-          
-          return {
-            totalSamples: newTotal,
-            inTuneSamples: newInTune,
-            percentage: Math.round((newInTune / newTotal) * 100),
-            bestStreak: Math.max(prev.bestStreak, pitch.streak + (isInTune ? 1 : 0)),
-          };
-        });
+        }));
+
+        const acc = statsAccumRef.current;
+        if (acc.total > 0) {
+          statsAccumRef.current = { total: 0, inTune: 0 };
+          setStats(prev => {
+            const newTotal = prev.totalSamples + acc.total;
+            const newInTune = prev.inTuneSamples + acc.inTune;
+            return {
+              totalSamples: newTotal,
+              inTuneSamples: newInTune,
+              percentage: Math.round((newInTune / newTotal) * 100),
+              bestStreak: Math.max(prev.bestStreak, bestStreakRef.current),
+            };
+          });
+        }
       }
-      
+
       animationFrameRef.current = requestAnimationFrame(analyze);
     };
-    
+
     animationFrameRef.current = requestAnimationFrame(analyze);
-  }, [pitch.streak]);
+  }, []);
 
   // Reset stats
   const resetStats = useCallback(() => {
@@ -278,6 +316,9 @@ export function usePitchDetection(): UsePitchDetectionReturn {
     });
     setPitch(prev => ({ ...prev, streak: 0 }));
     lastStreakConfettiRef.current = 0;
+    streakRef.current = 0;
+    bestStreakRef.current = 0;
+    statsAccumRef.current = { total: 0, inTune: 0 };
   }, []);
 
   // Register confetti callback
@@ -291,7 +332,12 @@ export function usePitchDetection(): UsePitchDetectionReturn {
       disableMic();
       if (audioContextRef.current) {
         audioContextRef.current.close();
+        // Null everything tied to the closed context so a remount
+        // (e.g. StrictMode's double-mount) builds a fresh graph
+        audioContextRef.current = null;
       }
+      refSourceRef.current = null;
+      refAnalyserRef.current = null;
     };
   }, [disableMic]);
 
