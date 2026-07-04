@@ -10,6 +10,7 @@
     "preview": "vite preview",
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
+    "tauri": "tauri",
     "clean:appledouble": "find . -name '._*' -not -path './node_modules/*' -delete",
     "desktop:dev": "npm run clean:appledouble && tauri dev",
     "desktop:build": "npm run clean:appledouble && tauri build"
