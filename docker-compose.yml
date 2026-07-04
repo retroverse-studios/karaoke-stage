@@ -1,0 +1,19 @@
+# Karaoke Stage — self-hosted party box
+#
+#   docker compose up -d
+#   open http://localhost:8080
+#
+# Songs are stored in each browser's IndexedDB, so the container itself is
+# stateless — nothing to back up server-side.
+#
+# NOTE: microphone scoring and folder import require a secure context.
+# They work on http://localhost, but other devices on your LAN reaching this
+# over plain http get playback only. Put an HTTPS reverse proxy (Caddy,
+# Traefik, Nginx Proxy Manager) in front to enable them everywhere.
+services:
+  karaoke-stage:
+    image: ghcr.io/retroverse-studios/karaoke-stage:latest
+    container_name: karaoke-stage
+    ports:
+      - "8080:80"
+    restart: unless-stopped

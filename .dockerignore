@@ -1,0 +1,17 @@
+node_modules
+dist
+.git
+.github
+.claude
+._*
+**/._*
+.DS_Store
+songs
+*.mp3
+*.cdg
+*.lrc
+landing
+src-tauri
+Dockerfile
+docker-compose.yml
+README.md

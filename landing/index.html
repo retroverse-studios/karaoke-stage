@@ -1,0 +1,131 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Karaoke Stage — host karaoke night anywhere</title>
+  <meta name="description" content="A themed CDG+MP3 and LRC karaoke player with real-time pitch scoring. Runs in your browser, on your desktop, or self-hosted. Your songs never leave your device.">
+  <link rel="icon" href="favicon.svg" type="image/svg+xml">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link href="https://fonts.googleapis.com/css2?family=Quicksand:wght@400;500;600;700&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+  <nav class="nav">
+    <div class="container nav-inner">
+      <a class="wordmark" href="#top">🎤 Karaoke Stage</a>
+      <div class="nav-links">
+        <a href="#features">Features</a>
+        <a href="#run">Run it</a>
+        <a href="https://github.com/retroverse-studios/karaoke-stage">GitHub</a>
+      </div>
+    </div>
+  </nav>
+
+  <header class="hero" id="top">
+    <div class="container hero-grid">
+      <div class="hero-copy">
+        <p class="eyebrow">Your songs · Your stage · Your device</p>
+        <h1>Host karaoke night <em>anywhere.</em></h1>
+        <p class="sub">
+          Karaoke Stage plays classic CDG+MP3 discs and LRC lyric files with
+          synchronized highlighting, themed party modes, and a real-time
+          singing score driven by your microphone.
+        </p>
+
+        <div class="cta-row">
+          <a class="btn btn-primary" href="./app/">🎤 Open the web app</a>
+          <a id="download-btn" class="btn btn-ghost" href="https://github.com/retroverse-studios/karaoke-stage/releases/latest">Download for desktop</a>
+        </div>
+
+        <div class="download-block" id="download">
+          <div class="platform-toggle" role="group" aria-label="Choose platform">
+            <button data-platform="mac" class="platform-btn">macOS</button>
+            <button data-platform="windows" class="platform-btn">Windows</button>
+            <button data-platform="linux" class="platform-btn">Linux</button>
+          </div>
+          <p class="version"><span id="version">&nbsp;</span> <a id="alt-arch" class="alt-arch" href="#" hidden></a></p>
+          <p class="all-releases"><a href="https://github.com/retroverse-studios/karaoke-stage/releases">All releases →</a></p>
+        </div>
+
+        <p class="privacy-tag">Local-first. Songs and microphone audio never leave your device.</p>
+      </div>
+
+      <div class="hero-shots">
+        <div class="carousel" id="carousel" aria-label="App screenshots">
+          <noscript><img src="assets/shot-library.png" alt="Karaoke Stage song library"></noscript>
+        </div>
+        <div class="carousel-dots" id="carousel-dots"></div>
+        <p class="carousel-caption" id="carousel-caption">&nbsp;</p>
+      </div>
+    </div>
+  </header>
+
+  <section class="features" id="features">
+    <div class="container">
+      <h2>Everything a party needs</h2>
+      <div class="feature-grid">
+        <div class="card">
+          <h3>📀 CDG &amp; LRC formats</h3>
+          <p>Plays classic MP3+CDG karaoke discs pixel-for-pixel, plus LRC lyric files with word-by-word highlighting.</p>
+        </div>
+        <div class="card">
+          <h3>🎯 Singing score</h3>
+          <p>Turn on the mic and the app compares your pitch to the backing track live — streaks, confetti, and a final score.</p>
+        </div>
+        <div class="card">
+          <h3>✨ Themed parties</h3>
+          <p>Christmas, Halloween, Neon Party, Kids and more — each with its own look, particles, and vibe. Or build your own theme.</p>
+        </div>
+        <div class="card">
+          <h3>📁 Folder import</h3>
+          <p>Point it at your karaoke collection and it pairs MP3s with CDG/LRC files and auto-categorizes by title.</p>
+        </div>
+        <div class="card">
+          <h3>🔌 Works offline</h3>
+          <p>Your library lives in the browser's own storage. After the first load, no internet required.</p>
+        </div>
+        <div class="card">
+          <h3>🔒 Private by design</h3>
+          <p>No accounts, no uploads, no analytics. Everything — songs, scores, settings — stays on your device.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <section class="run" id="run">
+    <div class="container">
+      <h2>Three ways to run it</h2>
+      <div class="run-grid">
+        <div class="card run-card">
+          <h3>🌐 In your browser</h3>
+          <p>Nothing to install. Chrome or Edge recommended for folder import.</p>
+          <a class="btn btn-primary btn-block" href="./app/">Open the web app</a>
+        </div>
+        <div class="card run-card">
+          <h3>💻 Desktop app</h3>
+          <p id="desktop-blurb">A native window for the living-room machine.</p>
+          <a id="download-btn-2" class="btn btn-primary btn-block" href="https://github.com/retroverse-studios/karaoke-stage/releases/latest">Download</a>
+          <p class="other-platforms" id="other-platforms"></p>
+        </div>
+        <div class="card run-card">
+          <h3>🐳 Self-hosted</h3>
+          <p>Run it on a home server or NAS as the house party box.</p>
+          <pre><code>curl -O https://raw.githubusercontent.com/retroverse-studios/karaoke-stage/main/docker-compose.yml
+docker compose up -d</code></pre>
+          <p class="fine-print">Pulls <code>ghcr.io/retroverse-studios/karaoke-stage</code>. Mic scoring needs HTTPS (or localhost) — see the compose file notes.</p>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <footer class="footer">
+    <div class="container footer-inner">
+      <p>MIT licensed · <a href="https://github.com/retroverse-studios/karaoke-stage">Source on GitHub</a></p>
+      <p class="fine-print">CDG rendering by <a href="https://www.npmjs.com/package/cdgraphics">cdgraphics</a>. Bring your own legally-owned karaoke files.</p>
+    </div>
+  </footer>
+
+  <script src="app.js"></script>
+</body>
+</html>
