@@ -5,15 +5,13 @@
  * to allow easy swapping for different platforms (web, Electron, Tauri).
  */
 
-import { Song, ThemeId, LyricsFormat, Difficulty } from '../types';
+import { Song, ThemeId, LyricsFormat } from '../types';
 
 /** Song data as stored in the database (includes binary blobs) */
 export interface StoredSong {
   id: string;
   title: string;
   duration: number;
-  difficulty: Difficulty;
-  description: string;
   audioBlob: Blob | File;
   lyricsFormat: LyricsFormat;
   lyricsData: Uint8Array | string;
@@ -28,8 +26,6 @@ export interface SongMetadata {
   id: string;
   title: string;
   duration: number;
-  difficulty: Difficulty;
-  description: string;
   isCustom: boolean;
   themeIds: ThemeId[];
   lyricsFormat: LyricsFormat;

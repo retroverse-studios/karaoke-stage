@@ -8,8 +8,8 @@ const CSP = [
   "default-src 'self'",
   "script-src 'self'",
   // 'unsafe-inline' is required for React inline style props
-  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
-  "font-src https://fonts.gstatic.com",
+  "style-src 'self' 'unsafe-inline'",
+  "font-src 'self'",
   "img-src 'self' data: blob:",
   "media-src 'self' blob:",
   "connect-src 'self'",

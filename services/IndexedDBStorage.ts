@@ -4,7 +4,7 @@
  * Implements the StorageService interface using IndexedDB for web browsers.
  */
 
-import { ThemeId, Difficulty } from '../types';
+import { ThemeId } from '../types';
 import { 
   StorageService, 
   StoredSong, 
@@ -63,8 +63,6 @@ class IndexedDBStorage implements StorageService {
           id: s.id,
           title: s.title,
           duration: s.duration || 0,
-          difficulty: s.difficulty || 'Medium',
-          description: s.description || 'Custom Track',
           isCustom: s.isCustom ?? true,
           themeIds: s.themeIds || (s.themeId ? [s.themeId] : ['christmas']),
           lyricsFormat: s.lyricsFormat || 'cdg',
@@ -95,8 +93,6 @@ class IndexedDBStorage implements StorageService {
           id: s.id,
           title: s.title,
           duration: s.duration || 0,
-          difficulty: (s.difficulty || 'Medium') as Difficulty,
-          description: s.description || 'Custom Track',
           isCustom: s.isCustom ?? true,
           themeIds: s.themeIds || (s.themeId ? [s.themeId] : ['christmas']),
           audioUrl: s.audioBlob ? URL.createObjectURL(s.audioBlob) : '',
@@ -132,8 +128,6 @@ class IndexedDBStorage implements StorageService {
           id,
           title: songData.title,
           duration: songData.duration,
-          difficulty: songData.difficulty,
-          description: songData.description,
           isCustom: songData.isCustom,
           themeIds: songData.themeIds,
           lyricsFormat: songData.lyricsFormat,

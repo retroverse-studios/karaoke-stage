@@ -74,6 +74,8 @@ Both files must have the same base name (e.g., `song.mp3` and `song.cdg`). When 
 
 Click **"Enable Mic"** in the player to turn on pitch detection. The app compares your pitch to the backing track (autocorrelation-based detection), shows a live meter, and presents a score summary when the song ends. Microphone audio never leaves the browser.
 
+> **How accurate is the score?** It's a party score, not a judge. Your pitch is compared against the dominant pitch of the whole backing-track mix (bass and drums included), not an extracted melody line, so scores vary by arrangement. Singing the right note an octave up or down counts as in tune. Tracks with a clear guide vocal or lead instrument score most sensibly.
+
 ### Organizing Songs
 
 - Use the category bar to filter songs by theme

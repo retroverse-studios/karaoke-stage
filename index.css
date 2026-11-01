@@ -1,5 +1,29 @@
 @import "tailwindcss";
 
+/* Self-hosted fonts (Quicksand + Mountains of Christmas, SIL OFL) so the app
+   makes no third-party requests */
+@font-face {
+  font-family: 'Quicksand';
+  font-style: normal;
+  font-weight: 300 700;
+  font-display: swap;
+  src: url('./assets/fonts/quicksand-var.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Mountains of Christmas';
+  font-style: normal;
+  font-weight: 400;
+  font-display: swap;
+  src: url('./assets/fonts/mountains-of-christmas-400.woff2') format('woff2');
+}
+@font-face {
+  font-family: 'Mountains of Christmas';
+  font-style: normal;
+  font-weight: 700;
+  font-display: swap;
+  src: url('./assets/fonts/mountains-of-christmas-700.woff2') format('woff2');
+}
+
 body {
   font-family: 'Quicksand', sans-serif;
   margin: 0;

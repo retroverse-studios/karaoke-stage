@@ -43,15 +43,22 @@ const CATEGORY_KEYWORDS: Record<BuiltInThemeId, string[]> = {
  * Returns an array of matching category IDs.
  * If no matches found, returns empty array (song will be uncategorized).
  */
+function keywordPattern(keyword: string): RegExp {
+  const escaped = keyword.toLowerCase().replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+  // Word-ish boundaries so 'love' doesn't fire inside "Glove" and 'abc'
+  // doesn't fire inside arbitrary letter runs
+  return new RegExp(`(?<![a-z])${escaped}(?![a-z])`);
+}
+
 export function matchCategories(title: string): ThemeId[] {
   const normalizedTitle = title.toLowerCase();
   const matches: ThemeId[] = [];
 
   for (const [categoryId, keywords] of Object.entries(CATEGORY_KEYWORDS)) {
     if (categoryId === 'classic') continue; // Skip "All Songs"
-    
+
     for (const keyword of keywords) {
-      if (normalizedTitle.includes(keyword.toLowerCase())) {
+      if (keywordPattern(keyword).test(normalizedTitle)) {
         matches.push(categoryId as ThemeId);
         break; // Only add each category once
       }
@@ -61,39 +68,3 @@ export function matchCategories(title: string): ThemeId[] {
   return matches;
 }
 
-/**
- * Returns a default category if no matches found.
- * We use 'christmas' as a sensible default for a karaoke app,
- * but you could change this or return an empty array.
- */
-export function matchCategoriesWithDefault(title: string, defaultCategory: ThemeId = 'christmas'): ThemeId[] {
-  const matches = matchCategories(title);
-  return matches.length > 0 ? matches : [defaultCategory];
-}
-
-/**
- * Gets a summary of category matches for display
- */
-export function getCategoryMatchSummary(titles: string[]): {
-  categorized: number;
-  uncategorized: number;
-  byCategory: Record<string, number>;
-} {
-  const byCategory: Record<string, number> = {};
-  let categorized = 0;
-  let uncategorized = 0;
-
-  for (const title of titles) {
-    const matches = matchCategories(title);
-    if (matches.length > 0) {
-      categorized++;
-      for (const cat of matches) {
-        byCategory[cat] = (byCategory[cat] || 0) + 1;
-      }
-    } else {
-      uncategorized++;
-    }
-  }
-
-  return { categorized, uncategorized, byCategory };
-}

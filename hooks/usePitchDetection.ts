@@ -49,8 +49,6 @@ export interface UsePitchDetectionReturn {
   disableMic: () => void;
   /** Connect reference audio element for comparison */
   connectReferenceAudio: (audioElement: HTMLAudioElement) => void;
-  /** Disconnect reference audio */
-  disconnectReferenceAudio: () => void;
   /** Reset stats (call at start of song) */
   resetStats: () => void;
   /** Trigger confetti callback when streak hits threshold */
@@ -91,6 +89,9 @@ export function usePitchDetection(): UsePitchDetectionReturn {
   // Streak lives in a ref because the analysis loop closure is created once
   // (from enableMic) and would otherwise read a stale pitch.streak forever
   const streakRef = useRef<number>(0);
+  // Guards against a rapid second click while getUserMedia is in flight,
+  // which would leak a stream and stack a second analysis loop
+  const enablingMicRef = useRef(false);
   const bestStreakRef = useRef<number>(0);
   // Per-frame sample counts, flushed to React state at a lower rate
   const statsAccumRef = useRef({ total: 0, inTune: 0 });
@@ -109,6 +110,8 @@ export function usePitchDetection(): UsePitchDetectionReturn {
 
   // Enable microphone
   const enableMic = useCallback(async () => {
+    if (enablingMicRef.current || micStreamRef.current) return;
+    enablingMicRef.current = true;
     try {
       const stream = await navigator.mediaDevices.getUserMedia({ 
         audio: {
@@ -145,6 +148,8 @@ export function usePitchDetection(): UsePitchDetectionReturn {
         ...prev, 
         error: 'Could not access microphone. Please check permissions.' 
       }));
+    } finally {
+      enablingMicRef.current = false;
     }
   }, [getAudioContext]);
 
@@ -202,12 +207,6 @@ export function usePitchDetection(): UsePitchDetectionReturn {
       console.error('Failed to connect reference audio:', err);
     }
   }, [getAudioContext]);
-
-  // Disconnect reference audio
-  const disconnectReferenceAudio = useCallback(() => {
-    refSourceRef.current = null;
-    refAnalyserRef.current = null;
-  }, []);
 
   // Analysis loop
   const startAnalysisLoop = useCallback(() => {
@@ -347,7 +346,6 @@ export function usePitchDetection(): UsePitchDetectionReturn {
     enableMic,
     disableMic,
     connectReferenceAudio,
-    disconnectReferenceAudio,
     resetStats,
     onStreakConfetti,
   };

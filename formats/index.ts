@@ -66,9 +66,3 @@ export function isGraphicsFormat(format: KaraokeFormatType): boolean {
   return format === 'cdg';
 }
 
-/**
- * Check if a format is text-based (renders lyrics)
- */
-export function isTextFormat(format: KaraokeFormatType): boolean {
-  return format === 'lrc';
-}

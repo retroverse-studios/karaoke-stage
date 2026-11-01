@@ -1,7 +1,7 @@
 
 import { useEffect, useState, useCallback, useImperativeHandle, forwardRef } from 'react';
 
-export type ParticleType = 'snow' | 'confetti' | 'egg' | 'star' | 'bubble' | 'bat' | 'heart' | 'sparkle';
+import type { ParticleType } from '../types';
 
 interface Particle {
   id: number;
@@ -38,6 +38,11 @@ const Atmosphere = forwardRef<AtmosphereRef, AtmosphereProps>(({ type }, ref) =>
 
   // Generate background particles
   useEffect(() => {
+    // Respect the OS-level reduced-motion preference
+    if (window.matchMedia?.('(prefers-reduced-motion: reduce)').matches) {
+      setParticles([]);
+      return;
+    }
     const pickRandom = (options: string[]) => options[Math.floor(Math.random() * options.length)];
     
     const getContent = () => {

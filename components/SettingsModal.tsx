@@ -106,7 +106,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSetting
   };
 
   const handleDeleteCustomCategory = (id: string) => {
-    if (!confirm('Delete this custom category? Songs will keep their other categories.')) return;
+    if (!confirm('Delete this custom category? Songs in only this category will move to the Christmas category.')) return;
     
     const customCategories = settings.customCategories || [];
     onUpdateSettings({
@@ -136,6 +136,7 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSetting
         className={`${settings.darkMode ? 'bg-slate-900' : 'bg-white'} border ${settings.darkMode ? 'border-white/10' : 'border-gray-200'} rounded-[2rem] p-6 max-w-2xl w-full max-h-[90vh] overflow-hidden flex flex-col relative`}>
         <button
           onClick={onClose}
+          autoFocus
           aria-label="Close"
           className={`absolute top-5 right-5 text-2xl ${settings.darkMode ? 'opacity-50 hover:opacity-100' : 'text-gray-400 hover:text-gray-600'}`}
         >
@@ -198,6 +199,34 @@ const SettingsModal: React.FC<SettingsModalProps> = ({ settings, onUpdateSetting
                     </div>
                   </button>
                 </div>
+              </div>
+
+
+              {/* Backing Track Volume */}
+              <div className={`p-4 rounded-xl ${settings.darkMode ? 'bg-white/5' : 'bg-gray-50'}`}>
+                <div className="flex items-center justify-between mb-3">
+                  <div>
+                    <h3 className={`font-semibold ${settings.darkMode ? 'text-white' : 'text-gray-900'}`}>
+                      Backing Track Volume
+                    </h3>
+                    <p className={`text-sm ${settings.darkMode ? 'text-gray-400' : 'text-gray-500'}`}>
+                      Playback volume for the song audio
+                    </p>
+                  </div>
+                  <span className={`text-sm font-bold ${settings.darkMode ? 'text-white' : 'text-gray-900'}`}>
+                    {settings.backingVolume}%
+                  </span>
+                </div>
+                <input
+                  type="range"
+                  min={0}
+                  max={100}
+                  step={5}
+                  value={settings.backingVolume}
+                  onChange={(e) => onUpdateSettings({ ...settings, backingVolume: Number(e.target.value) })}
+                  aria-label="Backing track volume"
+                  className="w-full accent-purple-600"
+                />
               </div>
 
               {/* Category Display Mode */}

@@ -97,12 +97,14 @@ export class LrcRenderer implements KaraokeRenderer {
       const words = lyrics ? this.parseWordTimings(lyrics, timestamps[0]) : null;
 
       // Add a line entry for each timestamp (some LRC files repeat lines).
-      // Words are cloned per entry so the offset pass below adjusts each once.
+      // Word times are absolute to the FIRST occurrence, so rebase them per
+      // entry; words are cloned so the offset pass below adjusts each once.
       for (const time of timestamps) {
+        const shift = time - timestamps[0];
         this.lines.push({
           time,
           text: words ? words.map(w => w.text).join('') : lyrics,
-          words: words ? words.map(w => ({ ...w })) : undefined
+          words: words ? words.map(w => ({ time: w.time + shift, text: w.text })) : undefined
         });
       }
     }

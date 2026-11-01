@@ -34,8 +34,6 @@ export interface UseSongLibraryReturn {
     lyricsFile: File;
     themeIds: ThemeId[];
   }) => Promise<SongMetadata>;
-  /** Filter songs by search term and theme */
-  getFilteredSongs: (searchTerm: string, themeId: ThemeId) => SongMetadata[];
 }
 
 export function useSongLibrary(): UseSongLibraryReturn {
@@ -81,6 +79,16 @@ export function useSongLibrary(): UseSongLibraryReturn {
     });
   }, []);
 
+  // Optimistic updates are rolled back from storage when persistence fails,
+  // so the UI never silently diverges from IndexedDB until the next reload
+  const resyncAfterFailure = useCallback(async (action: string, err: unknown) => {
+    console.error(`Failed to ${action}`, err);
+    try {
+      setSongs(await storage.getAllSongs());
+    } catch { /* keep current UI state if even the reload fails */ }
+    alert(`Couldn't ${action}. Storage may be full or unavailable — your library was reloaded from disk.`);
+  }, []);
+
   const deleteSong = useCallback(async (id: string) => {
     // Optimistic UI update
     setSongs(prev => prev.filter(s => s.id !== id));
@@ -94,9 +102,9 @@ export function useSongLibrary(): UseSongLibraryReturn {
     try {
       await storage.deleteSong(id);
     } catch (err) {
-      console.error("Failed to delete song", err);
+      await resyncAfterFailure('delete the song', err);
     }
-  }, []);
+  }, [resyncAfterFailure]);
 
   const renameSong = useCallback(async (id: string, newTitle: string) => {
     const trimmedTitle = newTitle.trim();
@@ -111,9 +119,9 @@ export function useSongLibrary(): UseSongLibraryReturn {
     try {
       await storage.updateSongTitle(id, trimmedTitle);
     } catch (err) {
-      console.error("Failed to rename song", err);
+      await resyncAfterFailure('rename the song', err);
     }
-  }, []);
+  }, [resyncAfterFailure]);
 
   const changeSongCategories = useCallback(async (id: string, themeIds: ThemeId[]) => {
     // Optimistic UI update
@@ -125,9 +133,9 @@ export function useSongLibrary(): UseSongLibraryReturn {
     try {
       await storage.updateSongCategories(id, themeIds);
     } catch (err) {
-      console.error("Failed to change song categories", err);
+      await resyncAfterFailure('change the song categories', err);
     }
-  }, []);
+  }, [resyncAfterFailure]);
 
   const addSong = useCallback(async (data: {
     title: string;
@@ -148,8 +156,6 @@ export function useSongLibrary(): UseSongLibraryReturn {
     const metadata = await storage.saveSong({
       title: data.title,
       duration: 0,
-      difficulty: 'Medium',
-      description: 'Custom Track',
       audioBlob: data.audioFile,
       lyricsFormat: format,
       lyricsData,
@@ -161,15 +167,6 @@ export function useSongLibrary(): UseSongLibraryReturn {
     return metadata;
   }, []);
 
-  const getFilteredSongs = useCallback((searchTerm: string, themeId: ThemeId): SongMetadata[] => {
-    return songs.filter(song => {
-      const matchesSearch = song.title.toLowerCase().includes(searchTerm.toLowerCase());
-      const songThemeIds = song.themeIds || [];
-      const matchesTheme = themeId === 'classic' || songThemeIds.includes(themeId);
-      return matchesSearch && matchesTheme;
-    });
-  }, [songs]);
-
   return {
     songs,
     isLoading,
@@ -179,7 +176,6 @@ export function useSongLibrary(): UseSongLibraryReturn {
     deleteSong,
     renameSong,
     changeSongCategories,
-    addSong,
-    getFilteredSongs
+    addSong
   };
 }

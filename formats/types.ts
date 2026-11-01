@@ -93,7 +93,3 @@ export interface KaraokeRenderer {
   dispose(): void;
 }
 
-/**
- * Factory function type for creating renderers
- */
-export type RendererFactory = (data: Uint8Array | string) => KaraokeRenderer;

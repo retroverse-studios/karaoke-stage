@@ -21,13 +21,52 @@ const DEFAULT_SETTINGS: UserSettings = {
   customCategories: []
 };
 
+const PARTICLE_TYPES = ['snow', 'confetti', 'egg', 'star', 'bubble', 'bat', 'heart', 'sparkle'];
+const DISPLAY_MODES = ['emoji', 'name', 'both'];
+
+/**
+ * Validate untrusted persisted settings field-by-field. Spreading raw
+ * JSON.parse output over the defaults lets a corrupt or hand-edited
+ * localStorage value (e.g. customCategories as a string) crash App render
+ * outside any ErrorBoundary.
+ */
+function sanitizeSettings(parsed: unknown): UserSettings {
+  const p = (parsed && typeof parsed === 'object') ? parsed as Record<string, unknown> : {};
+  const strArr = (v: unknown): string[] =>
+    Array.isArray(v) ? v.filter((x): x is string => typeof x === 'string') : [];
+  const customCategories: CustomCategory[] = Array.isArray(p.customCategories)
+    ? p.customCategories.flatMap((c) => {
+        if (!c || typeof c !== 'object') return [];
+        const cat = c as Record<string, unknown>;
+        if (typeof cat.id !== 'string' || typeof cat.name !== 'string') return [];
+        return [{
+          id: cat.id,
+          name: cat.name,
+          emoji: typeof cat.emoji === 'string' ? cat.emoji : '🎵',
+          primaryHex: typeof cat.primaryHex === 'string' ? cat.primaryHex : '#2563eb',
+          particleType: PARTICLE_TYPES.includes(cat.particleType as string)
+            ? cat.particleType as CustomCategory['particleType'] : 'star',
+        }];
+      })
+    : [];
+  return {
+    themeId: typeof p.themeId === 'string' ? p.themeId as ThemeId : DEFAULT_SETTINGS.themeId,
+    backingVolume: typeof p.backingVolume === 'number' && Number.isFinite(p.backingVolume)
+      ? Math.min(100, Math.max(0, p.backingVolume)) : DEFAULT_SETTINGS.backingVolume,
+    darkMode: typeof p.darkMode === 'boolean' ? p.darkMode : DEFAULT_SETTINGS.darkMode,
+    categoryDisplay: DISPLAY_MODES.includes(p.categoryDisplay as string)
+      ? p.categoryDisplay as UserSettings['categoryDisplay'] : DEFAULT_SETTINGS.categoryDisplay,
+    hiddenCategories: strArr(p.hiddenCategories),
+    customCategories,
+  };
+}
+
 function loadSettings(): UserSettings {
   try {
     // Try new key first, then fall back to legacy key for migration
     const saved = localStorage.getItem(SETTINGS_KEY) || localStorage.getItem(LEGACY_SETTINGS_KEY);
     if (saved) {
-      const parsed = JSON.parse(saved);
-      return { ...DEFAULT_SETTINGS, ...parsed };
+      return sanitizeSettings(JSON.parse(saved));
     }
   } catch (e) {
     console.error('[Settings] Failed to parse:', e);

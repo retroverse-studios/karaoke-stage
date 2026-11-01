@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { matchCategories, matchCategoriesWithDefault } from './categoryMatcher';
+import { matchCategories } from './categoryMatcher';
 
 describe('matchCategories', () => {
   it('matches christmas songs', () => {
@@ -31,13 +31,14 @@ describe('matchCategories', () => {
   });
 });
 
-describe('matchCategoriesWithDefault', () => {
-  it('falls back to the default when nothing matches', () => {
-    expect(matchCategoriesWithDefault('Bohemian Rhapsody')).toEqual(['christmas']);
-    expect(matchCategoriesWithDefault('Bohemian Rhapsody', 'party')).toEqual(['party']);
+describe('matchCategories word boundaries', () => {
+  it('does not match keywords embedded in other words', () => {
+    expect(matchCategories('Glove Story')).not.toContain('love');
+    expect(matchCategories('Scrabble Night')).not.toContain('kids');
   });
 
-  it('keeps real matches over the default', () => {
-    expect(matchCategoriesWithDefault('Jingle Bells', 'party')).toEqual(['christmas']);
+  it('still matches standalone keywords and phrases', () => {
+    expect(matchCategories('Crazy in Love')).toContain('love');
+    expect(matchCategories('Silent Night')).toContain('christmas');
   });
 });

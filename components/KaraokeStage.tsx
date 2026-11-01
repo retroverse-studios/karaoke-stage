@@ -34,6 +34,13 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
   const lastLyricsKeyRef = useRef('');
   const lastTimeUpdateRef = useRef(0);
 
+  // Apply the backing-track volume from settings
+  useEffect(() => {
+    if (audioRef.current) {
+      audioRef.current.volume = Math.min(1, Math.max(0, settings.backingVolume / 100));
+    }
+  }, [settings.backingVolume, isReady]);
+
   // Pitch detection hook
   const {
     pitch,
@@ -263,7 +270,7 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
         onEnded={handleSongEnd}
         onCanPlay={() => setIsReady(true)}
         onLoadedMetadata={(e: React.SyntheticEvent<HTMLAudioElement>) => setDuration(e.currentTarget.duration)}
-        onError={() => setError("Error loading media file.")}
+        onError={() => setError("Error loading media file. The stored audio may be corrupt or not a valid MP3 — try deleting and re-importing the song.")}
       />
 
       {/* Header */}
@@ -322,8 +329,17 @@ const KaraokeStage: React.FC<KaraokeStageProps> = ({ song, settings, onExit, the
 
       {/* Main content area */}
       <div className="flex-1 flex flex-col items-center justify-center relative z-10">
-        <div 
+        <div
           onClick={togglePlay}
+          role="button"
+          tabIndex={0}
+          aria-label={isPlaying ? 'Pause' : 'Play'}
+          onKeyDown={(e: React.KeyboardEvent<HTMLDivElement>) => {
+            if ((e.key === 'Enter' || e.key === ' ') && e.target === e.currentTarget) {
+              e.preventDefault();
+              togglePlay();
+            }
+          }}
           className="relative w-full max-w-5xl aspect-[300/216] bg-slate-900 rounded-3xl shadow-[0_0_80px_rgba(0,0,0,0.9)] border-4 border-slate-800 overflow-hidden cursor-pointer group"
         >
           {/* Graphics display (CDG) */}

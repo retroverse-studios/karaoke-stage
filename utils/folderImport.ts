@@ -42,10 +42,20 @@ export function isFolderPickerSupported(): boolean {
 /**
  * Recursively scan a directory for mp3+cdg pairs
  */
+interface ScanState {
+  /** Files looked at so far */
+  scanned: number;
+  /** Pairs found so far */
+  found: number;
+  /** True when a directory was skipped because of the depth limit */
+  depthLimited: boolean;
+}
+
 async function scanDirectory(
   dirHandle: FileSystemDirectoryHandle,
   pairs: SongPair[],
-  onProgress?: (count: number) => void,
+  state: ScanState,
+  onProgress?: (state: ScanState) => void,
   depth: number = 0
 ): Promise<void> {
   const mp3Files: Map<string, File> = new Map();
@@ -55,7 +65,11 @@ async function scanDirectory(
 
   // First pass: collect files and subdirectories
   for await (const entry of dirHandle.values()) {
+    // Skip macOS AppleDouble sidecars and hidden files (common on exFAT
+    // drives): '._Song.mp3' would otherwise pair into a junk song
+    if (entry.name.startsWith('._') || entry.name.startsWith('.')) continue;
     if (entry.kind === 'file') {
+      state.scanned++;
       const fileHandle = entry as FileSystemFileHandle;
       const file = await fileHandle.getFile();
       const nameLower = file.name.toLowerCase();
@@ -96,15 +110,18 @@ async function scanDirectory(
       lyricsFile,
       suggestedCategories: matchCategories(cleanName)
     });
+    state.found = pairs.length;
 
-    onProgress?.(pairs.length);
+    onProgress?.({ ...state });
   }
 
   // Recurse into subdirectories (limit depth to prevent infinite loops)
   if (depth < 5) {
     for (const subdir of subdirs) {
-      await scanDirectory(subdir, pairs, onProgress, depth + 1);
+      await scanDirectory(subdir, pairs, state, onProgress, depth + 1);
     }
+  } else if (subdirs.length > 0) {
+    state.depthLimited = true;
   }
 }
 
@@ -113,7 +130,7 @@ async function scanDirectory(
  */
 export async function pickAndScanFolder(
   onProgress?: (progress: ImportProgress) => void
-): Promise<SongPair[]> {
+): Promise<{ pairs: SongPair[]; depthLimited: boolean }> {
   if (!window.showDirectoryPicker) {
     throw new Error('Folder picker not supported in this browser. Please use Chrome or Edge.');
   }
@@ -133,17 +150,18 @@ export async function pickAndScanFolder(
     total: 0
   });
 
-  await scanDirectory(dirHandle, pairs, (count) => {
+  const state: ScanState = { scanned: 0, found: 0, depthLimited: false };
+  await scanDirectory(dirHandle, pairs, state, (s) => {
     onProgress?.({
       phase: 'scanning',
-      scanned: count,
-      found: count,
+      scanned: s.scanned,
+      found: s.found,
       imported: 0,
       total: 0
     });
   });
 
-  return pairs;
+  return { pairs, depthLimited: state.depthLimited };
 }
 
 /**

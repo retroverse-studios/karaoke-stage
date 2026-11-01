@@ -135,11 +135,21 @@ export function frequencyToNote(frequency: number): { note: string; octave: numb
  * 
  * Uses semitone distance - within half a semitone is considered "in tune"
  */
+/**
+ * Semitone distance between two frequencies, folded modulo the octave into
+ * [-6, 6): singing the right note an octave away (e.g. a male singer
+ * following a female guide vocal) counts as in tune.
+ */
+export function octaveFoldedSemitoneDiff(singerFreq: number, referenceFreq: number): number {
+  const diff = 12 * Math.log2(singerFreq / referenceFreq);
+  return ((diff + 6) % 12 + 12) % 12 - 6;
+}
+
 export function calculatePitchMatch(singerFreq: number, referenceFreq: number): number {
   if (!singerFreq || !referenceFreq) return 0;
-  
-  // Calculate semitone difference
-  const semitoneDiff = Math.abs(12 * Math.log2(singerFreq / referenceFreq));
+
+  // Calculate semitone difference (octave-equivalent)
+  const semitoneDiff = Math.abs(octaveFoldedSemitoneDiff(singerFreq, referenceFreq));
   
   // Within 0.5 semitones = perfect (100%)
   // 1 semitone off = 50%
@@ -162,8 +172,8 @@ export function calculatePitchMatch(singerFreq: number, referenceFreq: number): 
 export function getPitchDirection(singerFreq: number, referenceFreq: number): number {
   if (!singerFreq || !referenceFreq) return 0;
   
-  const semitoneDiff = 12 * Math.log2(singerFreq / referenceFreq);
-  
+  const semitoneDiff = octaveFoldedSemitoneDiff(singerFreq, referenceFreq);
+
   if (Math.abs(semitoneDiff) < 0.3) return 0; // On pitch (within ~30 cents)
   return semitoneDiff > 0 ? 1 : -1;
 }

@@ -1,6 +1,4 @@
 
-export type Difficulty = 'Easy' | 'Medium' | 'Hard';
-
 export type ParticleType = 'snow' | 'confetti' | 'egg' | 'star' | 'bubble' | 'bat' | 'heart' | 'sparkle';
 
 export type BuiltInThemeId = 'christmas' | 'easter' | 'birthday' | 'party' | 'halloween' | 'love' | 'kids' | 'classic';
@@ -48,8 +46,6 @@ export interface Song {
   id: string;
   title: string;
   duration: number;
-  difficulty: Difficulty;
-  description: string;
   audioUrl?: string;        // Only set when loaded for playback
   lyricsFormat: LyricsFormat;  // What format the lyrics/graphics are in
   lyricsData?: Uint8Array | string;  // CDG = Uint8Array, LRC = string (only set when loaded for playback)
@@ -72,8 +68,3 @@ export interface UserSettings {
   customCategories: CustomCategory[];
 }
 
-export interface PerformanceStats {
-  linesSung: number;
-  totalLines: number;
-  startTime: number;
-}

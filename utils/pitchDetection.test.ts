@@ -85,8 +85,17 @@ describe('calculatePitchMatch', () => {
     expect(calculatePitchMatch(220, 220)).toBe(1);
   });
 
-  it('scores an octave apart as zero', () => {
-    expect(calculatePitchMatch(440, 220)).toBe(0);
+  it('scores an octave apart as in tune (octave equivalence)', () => {
+    expect(calculatePitchMatch(440, 220)).toBe(1);
+    expect(calculatePitchMatch(110, 220)).toBe(1);
+    expect(calculatePitchMatch(446, 223)).toBeGreaterThan(0.9);
+  });
+
+  it('still scores a wrong note an octave away as poor', () => {
+    // 493.88 Hz (B4) vs 220 Hz (A3): two semitones off after folding
+    expect(calculatePitchMatch(493.88, 220)).toBeLessThan(0.1);
+    // 466.16 Hz (A#4) vs A3: one semitone off after folding
+    expect(calculatePitchMatch(466.16, 220)).toBeCloseTo(0.5, 1);
   });
 
   it('degrades with distance', () => {
@@ -109,5 +118,10 @@ describe('getPitchDirection', () => {
   it('reports sharp and flat', () => {
     expect(getPitchDirection(480, 440)).toBe(1);
     expect(getPitchDirection(400, 440)).toBe(-1);
+  });
+
+  it('reports on-pitch an octave away', () => {
+    expect(getPitchDirection(220, 440)).toBe(0);
+    expect(getPitchDirection(226, 440)).toBe(1); // sharp of the lower octave
   });
 });

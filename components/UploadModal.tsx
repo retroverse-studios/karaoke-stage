@@ -7,12 +7,10 @@
 import React, { useState, useRef, useEffect } from 'react';
 import { ThemeId, ThemeConfig } from '../types';
 import { pickAndScanFolder, importSongPairs, isFolderPickerSupported, ImportProgress, ImportResult } from '../utils/folderImport';
-import { SongMetadata } from '../services';
 
 interface UploadModalProps {
   isOpen: boolean;
   onClose: () => void;
-  onSongAdded: (metadata: SongMetadata, playImmediately?: { audioFile: File; cdgData: Uint8Array }) => void;
   onBulkImport: (name: string, mp3File: File, lyricsFile: File, categories: ThemeId[]) => Promise<boolean>;
   allThemes: Record<string, ThemeConfig>;
   activeTheme: ThemeConfig;
@@ -23,7 +21,6 @@ interface UploadModalProps {
 const UploadModal: React.FC<UploadModalProps> = ({
   isOpen,
   onClose,
-  onSongAdded,
   onBulkImport,
   allThemes,
   activeTheme,
@@ -121,9 +118,12 @@ const UploadModal: React.FC<UploadModalProps> = ({
     
     try {
       // Step 1: Scan folder for mp3+cdg pairs
-      const pairs = await pickAndScanFolder((progress) => {
+      const { pairs, depthLimited } = await pickAndScanFolder((progress) => {
         setFolderImportProgress(progress);
       });
+      if (depthLimited) {
+        alert('Note: folders nested deeper than 5 levels were not scanned. Import those folders directly to include their songs.');
+      }
 
       if (pairs.length === 0) {
         alert('No MP3+CDG or MP3+LRC pairs found in the selected folder.');
@@ -169,6 +169,7 @@ const UploadModal: React.FC<UploadModalProps> = ({
       }`}>
         <button
           onClick={handleClose}
+          autoFocus
           aria-label="Close"
           className={`absolute top-6 right-6 text-2xl ${
             isDark ? 'opacity-50 hover:opacity-100' : 'text-gray-400 hover:text-gray-600'

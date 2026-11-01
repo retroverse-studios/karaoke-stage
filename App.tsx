@@ -4,7 +4,7 @@
  * A web-based karaoke player with themed categories and CDG+MP3 support.
  */
 
-import React, { useState, useMemo, useRef, useCallback } from 'react';
+import React, { useState, useMemo, useRef, useCallback, useEffect } from 'react';
 import Atmosphere, { AtmosphereRef } from './components/Atmosphere';
 import SongCard from './components/SongCard';
 import KaraokeStage from './components/KaraokeStage';
@@ -62,13 +62,26 @@ const App: React.FC = () => {
     });
   }, [searchTerm, songs, settings.themeId]);
 
-  // Handler for bulk import (used by UploadModal)
+  // Case-insensitive set of existing titles for duplicate detection during
+  // import. A ref (updated on every songs change) because a bulk import loop
+  // would otherwise read the stale `songs` state captured at its start.
+  const knownTitlesRef = useRef<Set<string>>(new Set());
+  useEffect(() => {
+    knownTitlesRef.current = new Set(songs.map(s => s.title.trim().toLowerCase()));
+  }, [songs]);
+
+  // Handler for bulk import (used by UploadModal). Returns false for
+  // duplicates so folder imports count them as skipped.
   const handleBulkImport = async (
     name: string,
     mp3File: File,
     lyricsFile: File,
     categories: ThemeId[]
   ): Promise<boolean> => {
+    const titleKey = name.trim().toLowerCase();
+    if (knownTitlesRef.current.has(titleKey)) {
+      return false;
+    }
     try {
       const themeIds: ThemeId[] = categories.length > 0
         ? categories
@@ -80,12 +93,36 @@ const App: React.FC = () => {
         lyricsFile,
         themeIds
       });
+      knownTitlesRef.current.add(titleKey);
       return true;
     } catch (err) {
       console.error("Failed to save song", err);
       return false;
     }
   };
+
+  // Settings updates that delete a custom category must also strip that id
+  // from every song (falling back to 'christmas' when it was the only one)
+  // and from the active theme, rather than leaving orphan references
+  const handleUpdateSettings = useCallback((next: typeof settings) => {
+    const removedIds = (settings.customCategories || [])
+      .map(c => c.id)
+      .filter(id => !(next.customCategories || []).some(c => c.id === id));
+
+    let effective = next;
+    for (const removedId of removedIds) {
+      for (const song of songs) {
+        if ((song.themeIds || []).includes(removedId as ThemeId)) {
+          const kept = song.themeIds.filter(id => id !== removedId);
+          void changeSongCategories(song.id, kept.length > 0 ? kept : ['christmas']);
+        }
+      }
+      if (effective.themeId === removedId) {
+        effective = { ...effective, themeId: 'classic' };
+      }
+    }
+    setSettings(effective);
+  }, [settings, songs, changeSongCategories, setSettings]);
 
   // Loading state
   if (isLoading) {
@@ -247,7 +284,6 @@ const App: React.FC = () => {
       <UploadModal
         isOpen={isUploading}
         onClose={() => setIsUploading(false)}
-        onSongAdded={() => {}}
         onBulkImport={handleBulkImport}
         allThemes={allThemes}
         activeTheme={activeTheme}
@@ -259,7 +295,7 @@ const App: React.FC = () => {
       {showSettings && (
         <SettingsModal
           settings={settings}
-          onUpdateSettings={setSettings}
+          onUpdateSettings={handleUpdateSettings}
           onClose={() => setShowSettings(false)}
           allThemes={allThemes}
         />
